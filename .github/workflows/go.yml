@@ -7,8 +7,8 @@ on:
     branches: [ main, master ]
 
 jobs:
-  validate-and-run:
-    name: Validate Module Code Syntax
+  validate-module:
+    name: Validate Core Module Syntax
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -22,13 +22,9 @@ jobs:
       - name: Verify Core Module Dependencies
         run: go mod tidy
 
-      # Шаг 1: Проверяем саму библиотеку в контексте текущей ОС Linux
+      # Проверяем архитектуру ядра библиотеки под текущей ОС
       - name: Validate Core Library Syntax
         run: go build -v .
-
-      # Шаг 2: Указываем компилятору целевую ОС Android для валидации кода примера
-      - name: Validate Mobile App Syntax
-        run: GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -v ./example/main.go
 
   build-android-apk:
     name: Build Native Android APK
@@ -62,7 +58,7 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # Сборка итогового APK файла через полнофункциональный инструмент
+      # Инструмент gomobile автоматически активирует CGO и свяжет заголовочные файлы NDK
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
