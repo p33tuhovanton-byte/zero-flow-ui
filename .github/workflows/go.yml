@@ -24,7 +24,7 @@ jobs:
 
       # Прямой запуск файла без использования сломанных контекстов go.work
       - name: Compile and Run Example Application
-        run: go ru main.go
+        run: go run main.go
 
   build-android:
     name: Build Android Target Assets
