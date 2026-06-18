@@ -3,6 +3,7 @@ package main
 import (
 	"zeroflowui"
 	"golang.org/x/mobile/app"
+ "Golang.org/x/mobile/internal"
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
 )
