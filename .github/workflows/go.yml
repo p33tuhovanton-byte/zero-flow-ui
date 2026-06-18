@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
+env:
+  MODULE_NAME: ://github.com
+
 jobs:
   validate-module:
     name: Validate Core Module Syntax
@@ -57,11 +60,11 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      ## 🛠️ ИСПРАВЛЕННЫЙ ШАГ: Компилируем через явный путь именованного пакета модуля
+      # 🛠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Явно указываем компиляцию поддиректории /example, содержащей package main
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk zeroflowui
+          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ://github.com/example
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
