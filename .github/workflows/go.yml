@@ -6,12 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
-env:
-  MODULE_NAME: ://github.com
-
 jobs:
-  validate-module:
-    name: Validate Core Module Syntax
+  validate-and-run:
+    name: Validate Module Code Syntax
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -25,8 +22,9 @@ jobs:
       - name: Verify Core Module Dependencies
         run: go mod tidy
 
-      - name: Validate Core Library Syntax
-        run: go build -v .
+      # Отключаем CGO и проверяем синтаксис сборки, чтобы графические либы Linux не мешали
+      - name: Compile Check (Syntax Validation)
+        run: CGO_ENABLED=0 go build -v ./...
 
   build-android-apk:
     name: Build Native Android APK
@@ -60,11 +58,11 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # 🛠️ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Явно указываем компиляцию поддиректории /example, содержащей package main
+      # Gomobile сам корректно прокинет нужные GLES-заголовки из Android NDK во время этой команды
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ://github.com/example
+          gomobile build -target=android -o zero-flow.apk example/main.go
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
