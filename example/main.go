@@ -1,7 +1,7 @@
 package main
 
 import (
-	"://github.com"
+     "://github.com"
 )
 
 func main() {
