@@ -26,8 +26,8 @@ jobs:
       - name: Compile and Run Example Application
         run: go run example/main.go
 
-  build-android:
-    name: Build Android Target Assets
+  build-android-apk:
+    name: Build Native Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -42,26 +42,35 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # 🛠️ ВАЖНО: Установка Android NDK для компиляции C-go кода под мобильные процессоры
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      # Установка Go среды (требуется версия 1.26)
       - name: Setup Go Environment
         uses: actions/setup-go@v5
         with:
           go-version: '1.26'
 
+      # Установка инструментов компиляции Gomobile
       - name: Install Gomobile Tools
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # Сборка Android-бинарника напрямую из папки примера
-      - name: Build Android App (APK / Native Shared Library)
+      # Сборка полноценного автономного APK файла
+      - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          GOOS=android GOARCH=arm64 go build -o example-android-arm64 example/main.go
+          # Ключевая команда: собирает приложение и генерирует готовый файл zero-flow.apk
+          gomobile build -target=android -o zero-flow.apk example/main.go
 
-      - name: Upload Android Artifacts
+      # Загрузка готового APK в артефакты репозитория GitHub
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-build-assets
-          path: |
-            example-android-arm64
+          name: native-android-apk
+          path: zero-flow.apk
