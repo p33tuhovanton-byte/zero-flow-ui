@@ -22,7 +22,6 @@ jobs:
       - name: Verify Core Module Dependencies
         run: go mod tidy
 
-      # Проверяем архитектуру ядра библиотеки под текущей ОС
       - name: Validate Core Library Syntax
         run: go build -v .
 
@@ -58,11 +57,11 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # Инструмент gomobile автоматически активирует CGO и свяжет заголовочные файлы NDK
+      # 🛠️ ИСПРАВЛЕННЫЙ ШАГ: Явно задаем поддерживаемую версию API через флаг -androidapi
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          gomobile build -target=android -o zero-flow.apk example/main.go
+          gomobile build -androidapi 21 -target=android -o zero-flow.apk example/main.go
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
