@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	*zeroflowui"
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
