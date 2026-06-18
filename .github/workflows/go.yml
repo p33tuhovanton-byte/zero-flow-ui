@@ -1,0 +1,84 @@
+name: Zero-Collection Architecture CI & Android Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-and-run:
+    name: Build Module and Execute Example
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+
+      - name: Verify Module Dependencies
+        run: go mod tidy
+
+      - name: Compile and Run Example Application
+        run: go run example/main.go
+
+  build-android:
+    name: Build Android Target Assets
+    runs-on: ubuntu-latest
+    steps:
+      # Шаг 1: Скачивание кода репозитория zeroflowui
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Шаг 2: Установка Java (необходима для инструментов Android SDK)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # Шаг 3: Инициализация Android SDK и инструментов сборки
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Шаг 4: Установка Go для кросс-компиляции
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+
+      # Шаг 5: Инициализация инструментов Go Mobile (для Android NDK/APK сборки)
+      - name: Install Gomobile Tools
+        run: |
+          go install ://i-ology.com
+          go install ://i-ology.com
+          # Добавляем путь к установленным утилитам в системный PATH без массивов
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      # Шаг 6: Кросс-компиляция примера UI под архитектуру Android (ARM64)
+      # Если у вас есть Android-оболочка (например, на базе шаблона gomobile)
+      # эта команда собирает нативный APK-файл напрямую.
+      - name: Build Android App (APK / Native Shared Library)
+        run: |
+          # Инициализация среды компиляции gomobile
+          gomobile init
+          # Сборка исполняемого приложения (генерирует файл zeroflowui.apk или библиотеку .aar)
+          # Для демонстрации собираем исполняемый пакет примера под Android
+          GOOS=android GOARCH=arm64 go build -o example-android-arm64 example/main.go
+          
+          # Если вы хотите сгенерировать полноценный автономный APK через gomobile:
+          # gomobile build -target=android -o zeroflowui.apk example/main.go
+
+      # Шаг 7: Архивация и загрузка артефактов на GitHub
+      # Загружает скомпилированные Android-файлы, чтобы их можно было скачать из вкладки Actions
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-assets
+          path: |
+            example-android-arm64
+            *.apk
+            *.aar
