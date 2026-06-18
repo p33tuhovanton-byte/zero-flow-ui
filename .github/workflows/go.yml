@@ -57,10 +57,12 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # Используем чистый локальный путь к папке примера, полностью убирая модуль из команды
+      # 🛠️ ИСПРАВЛЕННЫЙ ШАГ: Принудительно скачиваем зависимости mobile перед сборкой APK
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
+          go get golang.org/x/mobile@latest
+          go mod tidy
           GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ./example
 
       - name: Upload Android APK
