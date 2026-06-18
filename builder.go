@@ -1,8 +1,6 @@
 package zeroflowui
 
-import (
-        "fmt"
-)
+import "fmt"
 
 // UIListener — функциональный тип для прослушивания событий.
 // Вызывается при срабатывании действия.
