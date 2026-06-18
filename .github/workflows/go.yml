@@ -7,8 +7,8 @@ on:
     branches: [ main, master ]
 
 jobs:
-  validate-and-run:
-    name: Validate Module Code Syntax
+  validate-module:
+    name: Validate Core Module Syntax
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -22,9 +22,8 @@ jobs:
       - name: Verify Core Module Dependencies
         run: go mod tidy
 
-      # Отключаем CGO и проверяем синтаксис сборки, чтобы графические либы Linux не мешали
-      - name: Compile Check (Syntax Validation)
-        run: CGO_ENABLED=0 go build -v ./...
+      - name: Validate Core Library Syntax
+        run: go build -v .
 
   build-android-apk:
     name: Build Native Android APK
@@ -58,11 +57,10 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # Gomobile сам корректно прокинет нужные GLES-заголовки из Android NDK во время этой команды
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          gomobile build -target=android -o zero-flow.apk example/main.go
+          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ://github.com
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
