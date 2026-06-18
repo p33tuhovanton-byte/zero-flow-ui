@@ -57,7 +57,7 @@ jobs:
       - name: Build Android App (APK / Native Shared Library)
         run: |
           gomobile init
-          GOOS=android GOARCH=arm64 go build -o example-android-arm64 main.go
+          GOOS=android GOARCH=arm64 go build -o example-android-arm64 ./main.go
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
