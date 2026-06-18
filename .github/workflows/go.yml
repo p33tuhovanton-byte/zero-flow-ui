@@ -57,11 +57,11 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # В этой строке жестко прописан правильный путь к /example без переменных и протоколов
+      # Используем чистый локальный путь к папке примера, полностью убирая модуль из команды
       - name: Compile Android APK via Gomobile
         run: |
           gomobile init
-          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ://github.com
+          GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ./example
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
