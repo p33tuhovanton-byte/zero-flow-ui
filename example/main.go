@@ -1,25 +1,40 @@
 package main
 
 import (
-        "zeroflowui"
+	"fmt"
+	*zeroflowui"
+	"golang.org/x/mobile/app"
+	"golang.org/x/mobile/event/lifecycle"
+	"golang.org/x/mobile/event/paint"
 )
 
 func main() {
-        textSignal := zeroflowui.TextSignal{
-                Type:    zeroflowui.TextType,
-                Payload: "Сигнальное сообщение успешно передано через функциональный поток.\n",
-        }
+	// Декларативная сборка истории UI для логов
+	uiTimeline := zeroflowui.EndOfUI()
+	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-        uiTimeline := zeroflowui.EndOfUI()
-        uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "MainWindow", "Rendered")
-        uiTimeline = zeroflowui.LogUIEvent(uiTimeline, true,  zeroflowui.EventLifecycle, "RefreshButton", "Initialized")
-        uiTimeline = zeroflowui.LogUIEvent(uiTimeline, true,  zeroflowui.EventInteraction, "RefreshButton", "Clicked")
-        uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "MainWindow", "Crash")
-        uiTimeline = zeroflowui.LogUIEvent(uiTimeline, true,  zeroflowui.EventInteraction, "RetryButton", "Clicked")
+	textSignal := zeroflowui.TextSignal{
+		Type:    zeroflowui.TextType,
+		Payload: "Zero-Collection UI запущен на Android OS!\n",
+	}
 
-        pipeline := zeroflowui.SystemPipelineDecorator{
-                Next: zeroflowui.TerminalProcessor{},
-        }
+	pipeline := zeroflowui.SystemPipelineDecorator{
+		Next: zeroflowui.TerminalProcessor{},
+	}
 
-        pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
+	// Запуск жизненного цикла нативного Android-приложения
+	app.Main(func(a app.App) {
+		for e := range a.Events() {
+			switch x := a.Filter(e).(type) {
+			case lifecycle.Event:
+				if x.To == lifecycle.StageFocused {
+					// Выполняем логику конвейера при фокусе приложения
+					pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
+				}
+			case paint.Event:
+				// Точка для отрисовки графики (очищаем экран)
+				a.Publish()
+			}
+		}
+	})
 }
