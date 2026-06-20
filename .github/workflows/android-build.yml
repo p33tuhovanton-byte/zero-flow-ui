@@ -1,4 +1,4 @@
-name: Android Gomobile Pure Build
+name: Android Gomobile Build
 
 on:
   push:
@@ -68,7 +68,6 @@ jobs:
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
               
               <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI" android:allowBackup="false">
-                  <!-- Внимание: изменено на org.golang.app.GoNativeActivity для прохождения валидации компилятора -->
                   <activity android:name="org.golang.app.GoNativeActivity" 
                       android:exported="true"
                       android:configChanges="orientation|keyboardHidden|screenSize">
@@ -82,7 +81,7 @@ jobs:
           </manifest>
           EOF
 
-      - name: Build Pure Android APK via Gomobile
+      - name: Build Android APK via Gomobile
         run: |
           export ANDROID_NDK_HOME=""
           gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example
@@ -90,5 +89,5 @@ jobs:
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-flow-pure-apk
+          name: zero-flow-apk
           path: zero-flow.apk
