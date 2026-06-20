@@ -1,57 +1,57 @@
-Название: Android Gomobile Pure Build
+name: Android Gomobile Pure Build 
 
-на:  
-Пуш:  
-ветви: [главные, основные]  
+on:  
+push:  
+branches: [ main, master ]  
 pull_request:  
-ветви: [главные, основные]  
-workflow_dispatch:
+branches: [ main, master ]  
+workflow_dispatch: 
 
-Работа:  
-построить:  
-Исполняется: Ubuntu-Latest
+jobs:  
+build:  
+runs-on: ubuntu-latest 
 
 env:  
-GO111MODULE: "Вкл  
+GO111MODULE: "on"  
 JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64  
 ANDROID_HOME: /usr/local/lib/android/sdk  
-ANDROID_SDK_ROOT: /USR/локальный/либ/андроид/СДК  
-Android_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+ANDROID_SDK_ROOT: /usr/local/lib/android/sdk  
+ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653 
 
-Шаги:  
-- Название: Исходный код для оформления заказа  
-Использование: actions/checkout@v3
+steps:  
+- name: Checkout Source Code  
+uses: actions/checkout@v3 
 
-- имя: Настроить среду разработки Go  
-Используется: actions/setup-go@v4  
-с:  
-Версия Go: "1.21"  
-кэш: true
+- name: Set up Go Development Environment  
+uses: actions/setup-go@v4  
+with:  
+go-version: '1.21'  
+cache: true 
 
-Название: Настройка JDK 17 (необходимо для использования в Android Tools)  
-Применение: Actions/setup-java@v3  
-с:  
-Java-версия: '17'  
-распространение: 'темурин'
+- name: Set up JDK 17 (Required for Android Tools)  
+uses: actions/setup-java@v3  
+with:  
+java-version: '17'  
+distribution: 'temurin' 
 
-Название: Инициализация цепочки инструментов Gomobile  
-Бег: |  
+- name: Initialize Gomobile Toolchain  
+run: |  
 go install golang.org/x/mobile/cmd/gomobile@latest  
-gomobile init
+gomobile init 
 
-- имя: Получить и синхронизировать зависимости Go  
-Бег: |  
-Перейдите на сайт golang.org/x/mobile@latest  
-Го мод аккуратно
+- name: Fetch and Synchronize Go Dependencies  
+run: |  
+go get golang.org/x/mobile@latest  
+go mod tidy 
 
-- Название: Build Android APK через Pure Gomobile Tag  
-Бег: |  
+- name: Build Android APK via Pure Gomobile Tag  
+run: |  
 # Прямая сборка монолитного APK под Android 11 (API 30)  
 # Логика белого фона и полноэкранного режима теперь работает на уровне Go-кода  
-сборка GOMOBILE - androidapi 30 -target=android -o zero-flow.apk ./example
+gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example 
 
-- Название: Загрузите собранный чистый артефакт в формате APK  
-Использование: actions/upload-artifact@v3  
-с:  
-Название: zero-flow-pure-go-apk  
-путь: zero-flow.apk
+- name: Upload Compiled Pure APK Artifact  
+uses: actions/upload-artifact@v3  
+with:  
+name: zero-flow-pure-go-apk  
+path: zero-flow.apk
