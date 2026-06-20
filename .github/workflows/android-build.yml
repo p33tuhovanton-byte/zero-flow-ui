@@ -41,52 +41,31 @@ jobs:
           go get golang.org/x/mobile@latest
           go mod tidy
 
-      - name: Inject Clean Production Android Manifest
+      - name: Cleanup Conflicting Local Manifests
         run: |
-          # Создаем манифест без extractNativeLibs, чтобы компилятор не падал,
-          # но с жесткой фиксацией системной полноэкранной темы.
-          cat << 'EOF' > example/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://android.com" 
-              package="zeroflowui.example"
-              android:versionCode="1"
-              android:versionName="1.0">
-              
-              <application android:label="ZeroFlowUI" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:allowBackup="false">
-                  <activity android:name="org.golang.app.GoNativeActivity" 
-                      android:exported="true"
-                      android:configChanges="orientation|keyboardHidden|screenSize">
-                      <meta-data android:name="android.app.lib_name" android:value="main" />
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
+          # Стираем локальный манифест, чтобы компилятор gomobile использовал 
+          # свой собственный, гарантированно валидный для Android инсталлятор.
+          rm -f example/AndroidManifest.xml
 
       - name: Build Genuine Android APK via Gomobile
         run: |
           export ANDROID_NDK_HOME=""
           
-          # Флаг -androidapi 30 внутри gomobile жестко зашьет в APK targetSdkVersion 30.
-          # Это полностью уберет предупреждение "создано для более ранней версии".
-          gomobile build -androidapi 30 -target=android/arm64 -o zero-flow-unsigned.apk ./example
+          # Собираем официальный стабильный fat-пакет под Android 11 (API 30).
+          # Компилятор Go сам правильно упакует нативные библиотеки.
+          gomobile build -androidapi 30 -o zero-flow-unsigned.apk ./example
 
-      - name: Inject Production Configurations and Sign APK
+      - name: Sign and Align Original Android APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           
-          unzip zero-flow-unsigned.apk -d apk_out
-          rm -rf apk_out/META-INF
-          cd apk_out && zip -r ../zero-flow-repacked.apk . && cd ..
+          # Выравниваем оригинальный рабочий APK, не разрушая его структуру распаковкой
+          $BUILD_TOOLS_DIR/zipalign -f -v 4 zero-flow-unsigned.apk zero-flow-aligned.apk
           
-          # Принудительно выравниваем нативные .so по правилам Android 11+ (Page-Aligned)
-          $BUILD_TOOLS_DIR/zipalign -f -p 4 zero-flow-repacked.apk zero-flow-aligned.apk
-          
+          # Генерируем ключ авторизации
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
+          # Подписываем оригинальный рабочий пакет современными схемами v2/v3
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out zero-flow.apk zero-flow-aligned.apk
 
       - name: Upload Finished APK Artifact
