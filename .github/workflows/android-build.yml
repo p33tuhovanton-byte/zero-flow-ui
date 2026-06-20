@@ -1,0 +1,181 @@
+name: Android Gomobile & Gradle Build 
+
+on:  
+push:  
+branches: \[ main, master \]  
+pull\_request:  
+branches: \[ main, master \]  
+workflow\_dispatch: 
+
+jobs:  
+build:  
+runs-on: ubuntu-latest 
+
+env:  
+GO111MODULE: on  
+JAVA\_HOME: /opt/hostedtoolcache/Java\_Temurin-Hotspot\_jdk/17.0.19-10/x64  
+ANDROID\_HOME: /usr/local/lib/android/sdk  
+ANDROID\_NDK\_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653 
+
+steps:  
+\- name: Checkout Source Code  
+uses: actions/checkout@v3 
+
+\- name: Set up Go Development Environment  
+uses: actions/setup-go@v4  
+with:  
+go-version: '1.21'  
+cache: true 
+
+\- name: Set up JDK 17 (Temurin)  
+uses: actions/setup-java@v3  
+with:  
+java-version: '17'  
+distribution: 'temurin'  
+cache: 'gradle' 
+
+\- name: Setup Android NDK and SDK Environment  
+run: |  
+echo "ANDROID\_HOME=
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)𝑒𝑛𝑣.𝐴𝑁𝐷𝑅𝑂𝐼𝐷𝐻𝑂𝑀𝐸
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)"
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)\>\>
+
+GITHUB\_ENV  
+echo "ANDROID\_NDK\_HOME=
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)𝑒𝑛𝑣.𝐴𝑁𝐷𝑅𝑂𝐼𝐷𝑁𝐷𝐾𝐻𝑂𝑀𝐸
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)"
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)
+
+![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)\>\>
+
+GITHUB\_ENV 
+
+\- name: Initialize Gomobile Toolchain  
+run: |  
+go install golang.org/x/mobile/cmd/gomobile@latest  
+gomobile init 
+
+\- name: Fetch and Synchronize Go Dependencies  
+run: |  
+go get golang.org/x/mobile@latest  
+go mod tidy 
+
+\- name: Generate Android Resources and Directories  
+run: |  
+\# Автоматическое создание структуры проекта Gradle, если её нет  
+mkdir -p android/app/libs  
+mkdir -p android/app/src/main/res/values  
+mkdir -p android/gradle/wrapper 
+
+\- name: Generate Root build.gradle  
+run: |  
+cat << 'EOF' > android/build.gradle  
+buildscript {  
+repositories {  
+google()  
+mavenCentral()  
+}  
+dependencies {  
+classpath 'com.android.tools.build:gradle:7.4.2'  
+}  
+}  
+allprojects {  
+repositories {  
+google()  
+mavenCentral()  
+}  
+}  
+task clean(type: Delete) {  
+delete rootProject.buildDir  
+}  
+EOF 
+
+\- name: Generate App build.gradle (Target API 30 for Android 11)  
+run: |  
+cat << 'EOF' > android/app/build.gradle  
+apply plugin: 'com.android.application' 
+
+android {  
+compileSdkVersion 30  
+ndkVersion "25.2.9519653" 
+
+defaultConfig {  
+applicationId "zeroflowui.example"  
+minSdkVersion 21  
+targetSdkVersion 30  
+versionCode 1  
+versionName "1.0"  
+} 
+
+buildTypes {  
+release {  
+minifyEnabled false  
+proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'  
+}  
+}  
+} 
+
+dependencies {  
+implementation fileTree(dir: 'libs', include: \['*.jar', '*.aar'\])  
+}  
+EOF 
+
+\- name: Generate Fullscreen White Theme (themes.xml)  
+run: |  
+cat << 'EOF' > android/app/src/main/res/values/themes.xml  
+  
+  
+  
+#FFFFFF  
+#FFFFFF  
+#FFFFFF  
+false  
+  
+  
+EOF 
+
+\- name: Generate Production AndroidManifest.xml  
+run: |  
+cat << 'EOF' > android/app/src/main/src/main/AndroidManifest.xml  
+  
+ 
+
+  
+  
+  
+  
+  
+  
+  
+  
+EOF 
+
+\- name: Setup Gradle Wrapper Environment  
+run: |  
+cd android  
+gradle wrapper --gradle-version 7.5 
+
+\- name: Execute Gomobile Bind (Compile Go to Native AAR)  
+run: |  
+gomobile bind -androidapi 30 -target=android -o ./android/app/libs/zero\_flow.aar ./example 
+
+\- name: Compile Fullscreen White Android APK via Gradle  
+run: |  
+cd android  
+chmod +x gradlew  
+./gradlew assembleDebug 
+
+\- name: Upload Compiled Production APK Artifact  
+uses: actions/upload-artifact@v3  
+with:  
+name: zero-flow-api30-apps  
+path: android/app/build/outputs/apk/debug/app-debug.apk
