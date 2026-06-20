@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.21'
           cache: true
 
       - name: Set up JDK 17
@@ -54,7 +54,6 @@ jobs:
                   <activity android:name="org.golang.app.GoNativeActivity" 
                       android:exported="true"
                       android:configChanges="orientation|keyboardHidden|screenSize">
-                      <!-- Фикс: gomobile компилирует package main в libmain.so, а не libexample.so -->
                       <meta-data android:name="android.app.lib_name" android:value="main" />
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -68,20 +67,18 @@ jobs:
       - name: Build Android APK via Gomobile
         run: |
           export ANDROID_NDK_HOME=""
-          gomobile build -androidapi 30 -target=android -o zero-flow-unsigned.apk ./example
+          # ИСПРАВЛЕНИЕ: Жестко фиксируем сборку под современную 64-битную архитектуру arm64
+          # Это исключит конфликты мульти-архитектурного парсинга установщика Android 11+
+          gomobile build -androidapi 30 -target=android/arm64 -o zero-flow-unsigned.apk ./example
 
       - name: Sign and Align Android APK (Fix Parsing Error)
         run: |
-          # 1. Находим актуальные инструменты Android SDK Build Tools на сервере
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           
-          # 2. Выполняем оптимизацию выравнивания пикселей пакета
           $BUILD_TOOLS_DIR/zipalign -v 4 zero-flow-unsigned.apk zero-flow-aligned.apk
           
-          # 3. Генерируем временное цифровое хранилище ключей (Keystore)
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
-          # 4. Исправленный синтаксис apksigner для современных SDK (используем --ks)
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out zero-flow.apk zero-flow-aligned.apk
 
       - name: Upload Finished APK Artifact
