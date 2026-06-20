@@ -54,12 +54,10 @@ jobs:
               repositories { 
                   google()
                   mavenCentral()
-                  // ПРАВИЛЬНЫЙ РЕПОЗИТОРИЙ ДЛЯ ПЛАГИНА GOBIND
                   gradlePluginPortal() 
               }
               dependencies { 
                   classpath 'com.android.tools.build:gradle:7.4.2'
-                  // Используем стабильную версию плагина из портала
                   classpath 'org.golang.mobile.bind:org.golang.mobile.bind.gradle.plugin:0.2.13'
               }
           }
@@ -68,7 +66,7 @@ jobs:
           }
           EOF
 
-      - name: Generate App build.gradle (Target API 30 + Gobind Tag)
+      - name: Generate App build.gradle (Target API 30 + Correct Gobind)
         run: |
           cat << 'EOF' > example/android/app/build.gradle
           apply plugin: 'com.android.application'
@@ -84,13 +82,17 @@ jobs:
                   targetSdkVersion 30
                   versionCode 1
                   versionName "1.0"
+                  
+                  // Архитектуры процессоров настраиваются здесь вместо GOARCH
+                  ndk {
+                      abiFilters 'armeabi-v7a', 'arm64-v8a'
+                  }
               }
           }
 
+          // Исправленный блок конфигурации без ошибочных свойств GOOS/GOARCH
           gobind {
-              pkg = "../../example" 
-              GOOS = ["android"]
-              GOARCH = ["arm", "arm64"]
+              pkg = "../../example"
           }
           EOF
 
@@ -132,4 +134,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zero-flow-gobind-plugin-apk
-          path: example/android/app/build/outputs/apk/debug/app-zero-flow-ui.apk
+          path: example/android/app/build/outputs/apk/debug/app-debug.apk
