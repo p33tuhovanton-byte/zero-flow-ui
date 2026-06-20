@@ -1,57 +1,129 @@
-name: Android Gomobile Pure Build 
+name: Android Go and Gradle Build
 
-on:  
-  push:  
-    branches: [ main, master ]  
-  pull_request:  
-    branches: [ main, master ]  
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
+jobs:
+  build:
+    name: Build Android Project with Gradle and Go
+    runs-on: ubuntu-latest
 
-jobs:  
-  build:  
-   runs-on: ubuntu-latest 
+    env:
+      GO111MODULE: "on"
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
-env:  
-GO111MODULE: "on"  
-JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64  
-ANDROID_HOME: /usr/local/lib/android/sdk  
-ANDROID_SDK_ROOT: /usr/local/lib/android/sdk  
-ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653 
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
 
-steps:  
-- name: Checkout Source Code  
-uses: actions/checkout@v3 
+      - name: Set up Go Development Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
 
-- name: Set up Go Development Environment  
-uses: actions/setup-go@v4  
-with:  
-go-version: '1.21'  
-cache: true 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-- name: Set up JDK 17 (Required for Android Tools)  
-uses: actions/setup-java@v3  
-with:  
-java-version: '17'  
-distribution: 'temurin' 
+      - name: Initialize Gomobile Toolchain
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
 
-- name: Initialize Gomobile Toolchain  
-run: |  
-go install golang.org/x/mobile/cmd/gomobile@latest  
-gomobile init 
+      - name: Fetch and Synchronize Go Dependencies
+        run: |
+          go get golang.org/x/mobile@latest
+          go mod tidy
 
-- name: Fetch and Synchronize Go Dependencies  
-run: |  
-go get golang.org/x/mobile@latest  
-go mod tidy 
+      - name: Generate Android Project Structure
+        run: |
+          mkdir -p example/android/app/libs
+          mkdir -p example/android/app/src/main/res/values
 
-- name: Build Android APK via Pure Gomobile Tag  
-run: |  
-# Прямая сборка монолитного APK под Android 11 (API 30)  
-# Логика белого фона и полноэкранного режима теперь работает на уровне Go-кода  
-gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example 
+      - name: Create Base Gradle Files
+        run: |
+          echo "include ':app'" > example/android/settings.gradle
+          
+          cat << 'EOF' > example/android/build.gradle
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:7.4.2' }
+          }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
+          EOF
 
-- name: Upload Compiled Pure APK Artifact  
-uses: actions/upload-artifact@v3  
-with:  
-name: zero-flow-pure-go-apk  
-path: zero-flow.apk
+      - name: Create App Level build.gradle
+        run: |
+          cat << 'EOF' > example/android/app/build.gradle
+          apply plugin: 'com.android.application'
+          android {
+              compileSdkVersion 30
+              ndkVersion "25.2.9519653"
+              defaultConfig {
+                  applicationId "zeroflowui.example"
+                  minSdkVersion 21
+                  targetSdkVersion 30
+                  versionCode 1
+                  versionName "1.0"
+              }
+          }
+          dependencies {
+              implementation fileTree(dir: 'libs', include: ['*.aar'])
+          }
+          EOF
+
+      - name: Create Fullscreen Themes and Manifest
+        run: |
+          cat << 'EOF' > example/android/app/src/main/res/values/themes.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.ZeroFlowUI" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+                  <item name="android:windowBackground">#FFFFFF</item>
+                  <item name="android:statusBarColor">#FFFFFF</item>
+              </style>
+          </resources>
+          EOF
+
+          cat << 'EOF' > example/android/app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://android.com" package="zeroflowui.example">
+              <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI">
+                  <activity android:name="org.golang.mobile.AppActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Compile Go Code into Native Android Library (.aar)
+        run: |
+          gomobile bind -androidapi 30 -target=android -o ./example/android/app/libs/zero_flow.aar ./example
+
+      # ЭТАП УСТАНОВКИ И НАСТРОЙКИ GRADLE С ПОМОЩЬЮ ОФИЦИАЛЬНОГО ЭКШЕНА
+      - name: Setup and Execute Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 7.5
+          build-root-directory: example/android
+          arguments: assembleDebug
+
+      - name: Upload Compiled APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zero-flow-gradle-apk
+          path: example/android/app/build/outputs/apk/debug/app-zerro-flow-ui.apk
