@@ -48,13 +48,6 @@ jobs:
           npm install
           npm run build:go
 
-      # --- ШАГ 1: СБОРКА И ПРОВЕРКА ТИПОВ TYPESCRIPT ---
-      - name: Install Node.js dependencies & Build TS
-        # 🛠️ ИСПРАВЛЕНИЕ: working-directory удален, так как package.json лежит в корне репозитория
-        run: |
-          npm install
-          npx build:go
-
       # --- ШАГ 2: ВАЛИДАЦИЯ БАЗОВОГО GO МОДУЛЯ ---
       - name: Verify Core Module Dependencies
         run: go mod tidy
