@@ -112,6 +112,10 @@ jobs:
 
       - name: Compile Go Code into Native Android Library (.aar)
         run: |
+          # Принудительно очищаем ANDROID_NDK_HOME для обхода бага с platforms.json
+          export ANDROID_NDK_HOME=""
+          
+          # Запускаем сборку нативного AAR-пакета под Android 11 (API 30)
           gomobile bind -androidapi 30 -target=android -o ./example/android/app/libs/zero_flow.aar ./example
 
       # ЭТАП УСТАНОВКИ И НАСТРОЙКИ GRADLE С ПОМОЩЬЮ ОФИЦИАЛЬНОГО ЭКШЕНА
