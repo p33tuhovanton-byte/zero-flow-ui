@@ -1,4 +1,4 @@
-name: Android Gradle and Gobind Plugin Build
+name: Android Gomobile Pure Build
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build via Gradle Gobind Plugin
+    name: Compile Native Fullscreen Application
     runs-on: ubuntu-latest
 
     env:
@@ -25,13 +25,13 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.21'
           cache: true
 
-      - name: Set up JDK 11 (Требуется для старых версий Gradle)
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Initialize Gomobile Toolchain
@@ -41,65 +41,13 @@ jobs:
           go get golang.org/x/mobile@latest
           go mod tidy
 
-      - name: Create Structure for Gradle Project
+      - name: Inject Production Android Manifest and Themes
         run: |
-          mkdir -p example/android/app/src/main/res/values
+          # Создаем кастомную структуру ресурсов, которую gomobile внедрит в APK вместо дефолтной
+          mkdir -p example/res/values
 
-      - name: Generate Root build.gradle (Фикс версий под gobind)
-        run: |
-          echo "include ':app'" > example/android/settings.gradle
-          
-          cat << 'EOF' > example/android/build.gradle
-          buildscript {
-              repositories { 
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal() 
-              }
-              dependencies { 
-                  // Понижаем версию AGP до совместимой 4.2.2, где есть bootClasspath
-                  classpath 'com.android.tools.build:gradle:4.2.2'
-                  classpath 'org.golang.mobile.bind:org.golang.mobile.bind.gradle.plugin:0.2.13'
-              }
-          }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
-          EOF
-
-      - name: Generate App build.gradle (Target API 30 + Gobind)
-        run: |
-          cat << 'EOF' > example/android/app/build.gradle
-          apply plugin: 'com.android.application'
-          apply plugin: 'org.golang.mobile.bind'
-
-          android {
-              // Для AGP 4.x используем классический синтаксис свойств
-              compileSdkVersion 30
-              buildToolsVersion "30.0.3"
-              ndkVersion "25.2.9519653"
-              
-              defaultConfig {
-                  applicationId "zeroflowui.example"
-                  minSdkVersion 21
-                  targetSdkVersion 30
-                  versionCode 1
-                  versionName "1.0"
-                  
-                  ndk {
-                      abiFilters 'armeabi-v7a', 'arm64-v8a'
-                  }
-              }
-          }
-
-          gobind {
-              pkg = "../../example"
-          }
-          EOF
-
-      - name: Generate Fullscreen Themes & AndroidManifest.xml
-        run: |
-          cat << 'EOF' > example/android/app/src/main/res/values/themes.xml
+          # 1. Генерируем тему оформления (Белый цвет + Полноэкранный режим)
+          cat << 'EOF' > example/res/values/themes.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <style name="Theme.ZeroFlowUI" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
@@ -110,11 +58,20 @@ jobs:
           </resources>
           EOF
 
-          cat << 'EOF' > example/android/app/src/main/AndroidManifest.xml
+          # 2. Генерируем правильный манифест для Android 11 (API 30)
+          cat << 'EOF' > example/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://android.com" package="zeroflowui.example">
-              <application android:label="ZeroFlowUI Gradle App" android:theme="@style/Theme.ZeroFlowUI">
-                  <activity android:name="org.golang.mobile.AppActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize">
+          <manifest xmlns:android="http://android.com" 
+              package="zeroflowui.example"
+              android:versionCode="1"
+              android:versionName="1.0">
+              
+              <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
+              
+              <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI" android:allowBackup="false">
+                  <activity android:name="org.golang.mobile.AppActivity" 
+                      android:exported="true"
+                      android:configChanges="orientation|keyboardHidden|screenSize">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -124,15 +81,17 @@ jobs:
           </manifest>
           EOF
 
-      - name: Set up and Run Совместимый Gradle 6.9
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 6.9.4
-          build-root-directory: example/android
-          arguments: assembleDebug -Dorg.gradle.environment.ANDROID_NDK_HOME=""
+      - name: Build Pure Android APK via Gomobile
+        run: |
+          # Очищаем ANDROID_NDK_HOME для обхода бага с platforms.json
+          export ANDROID_NDK_HOME=""
+          
+          # Запускаем прямую сборку. Наличие AndroidManifest.xml в папке заставит
+          # gomobile использовать наши кастомные ресурсы и зафиксировать API 30
+          gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example
 
-      - name: Upload Finished Gradle APK Artifact
+      - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-flow-gobind-plugin-apk
-          path: example/android/app/build/outputs/apk/debug/app-debug.apk
+          name: zero-flow-pure-apk
+          path: zero-flow.apk
