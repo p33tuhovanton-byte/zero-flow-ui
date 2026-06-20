@@ -37,8 +37,8 @@ jobs:
       - name: Set up Node.js environment
         uses: actions/setup-node@v4
         with:
-          # 🛠️ ИСПРАВЛЕНИЕ: Переход на Node.js 24, так как Node 20 официально устарел в Actions
           node-version: '24'
+          # Отключаем дефолтный поиск package-lock.json, если его нет в репозитории
           cache: 'npm'
           # 🛠️ ИСПРАВЛЕНИЕ: Если кэш падает, убедитесь, что путь к файлу блокировки указан верно от корня
           cache-dependency-path: 'zero-flow-ui/package-lock.json'
@@ -47,8 +47,6 @@ jobs:
       - name: Install Node.js dependencies & Build TS
         working-directory: ./zero-flow-ui
         run: |
-          # Если package-lock.json отсутствует в репозитории, используем npm install. 
-          # Если он закоммичен, надежнее использовать npm ci для чистой сборки.
           npm install
           npx tsc
 
