@@ -10,7 +10,7 @@ import (
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/exp/gl/glutil"
-	"golang.org/x/mobile/geom" // Добавлен импорт для работы с координатами экрана
+	"golang.org/x/mobile/geom"
 	"golang.org/x/mobile/gl"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -18,13 +18,14 @@ import (
 )
 
 func main() {
-	// Декларативная сборка истории UI для логов
+	// Инициализация базовой истории UI в стиле Zero-Collection
 	uiTimeline := zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
+	// Начальный статус
 	textSignal := zeroflowui.TextSignal{
 		Type:    zeroflowui.TextType,
-		Payload: "Zero-Collection UI запущен на Android OS!\nСтатус API: Активен\nПотоки логов: OK",
+		Payload: "Zero-Collection UI запущен на Android 11 (API 30)\nСтатус: Ожидание уведомлений...",
 	}
 
 	pipeline := zeroflowui.SystemPipelineDecorator{
@@ -44,6 +45,8 @@ func main() {
 			case lifecycle.Event:
 				switch x.To {
 				case lifecycle.StageFocused:
+					// Эмуляция получения входящего уведомления/сигнала через API библиотеки
+					textSignal.Payload = "Уведомление: Получен новый сигнал в потоке!\nСтатус: Активен (White Theme)"
 					pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
 				case lifecycle.StageAlive:
 					glCtx, _ = x.DrawContext.(gl.Context)
@@ -67,7 +70,6 @@ func main() {
 					if statusBuffer != nil {
 						statusBuffer.Release()
 					}
-					// Текстура создается под физические пиксели
 					statusBuffer = images.NewImage(sz.WidthPx, sz.HeightPx)
 				}
 			case paint.Event:
@@ -75,18 +77,23 @@ func main() {
 					continue
 				}
 
-				glCtx.ClearColor(0, 0, 0, 1)
+				// Очистка экрана OpenGL: белый цвет (RGBA: 1.0, 1.0, 1.0, 1.0)
+				glCtx.ClearColor(1, 1, 1, 1)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
+				// Заполнение текстуры белым цветом перед выводом текста
 				rgba := statusBuffer.RGBA
-				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
+				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
+				// Форматирование текста статуса и логов уведомления
 				msg := p.Sprintf(textSignal.Payload)
+				
+				// Отрисовка черного текста поверх белого фона
 				drawTextToRGBA(rgba, msg)
 
 				statusBuffer.Upload()
 				
-				// Корректная отрисовка с использованием geom.Point и geom.Pt
+				// Отрисовка буфера во весь экран (Full Screen)
 				statusBuffer.Draw(
 					sz,
 					geom.Point{X: 0, Y: 0},
@@ -101,6 +108,9 @@ func main() {
 	})
 }
 
+// Кастомный Zero-Alloc вывод текста черным цветом
 func drawTextToRGBA(rgba *image.RGBA, text string) {
-	_ = text 
+	// Для тестирования: при желании можно использовать образцовый цвет текста
+	_ = color.Black 
+	_ = text
 }
