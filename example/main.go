@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"strings"
 
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
@@ -12,22 +13,22 @@ import (
 	"golang.org/x/mobile/exp/gl/glutil"
 	"golang.org/x/mobile/geom"
 	"golang.org/x/mobile/gl"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 	"zeroflowui"
 )
 
 func main() {
-	// Инициализация базовой истории UI в стиле Zero-Collection
+	// 1. Используем штатную сборку истории UI из вашей библиотеки
 	uiTimeline := zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-	// Начальный статус
+	// 2. Управляем интерфейсом через структуру TextSignal "из коробки"
+	// Используем специальный синтаксис внутри Payload для передачи команд действия (Action)
 	textSignal := zeroflowui.TextSignal{
 		Type:    zeroflowui.TextType,
-		Payload: "Zero-Collection UI запущен на Android 11 (API 30)\nСтатус: Ожидание уведомлений...",
+		Payload: "CMD:SET_THEME_WHITE|MODE:FULLSCREEN|MSG:Zero-Collection UI активен на Android 11!\n",
 	}
 
+	// 3. Стандартный декоратор конвейера из вашей библиотеки
 	pipeline := zeroflowui.SystemPipelineDecorator{
 		Next: zeroflowui.TerminalProcessor{},
 	}
@@ -37,22 +38,20 @@ func main() {
 	var statusBuffer *glutil.Image
 	var sz size.Event
 
-	p := message.NewPrinter(language.English)
-
 	app.Main(func(a app.App) {
 		for e := range a.Events() {
 			switch x := a.Filter(e).(type) {
 			case lifecycle.Event:
 				switch x.To {
 				case lifecycle.StageFocused:
-					// Эмуляция получения входящего уведомления/сигнала через API библиотеки
-					textSignal.Payload = "Уведомление: Получен новый сигнал в потоке!\nСтатус: Активен (White Theme)"
+					// Передаем сигнал в конвейер обработки zeroflowui без изменений кода библиотеки
 					pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
 				case lifecycle.StageAlive:
 					glCtx, _ = x.DrawContext.(gl.Context)
 					if glCtx != nil {
 						images = glutil.NewImages(glCtx)
 					}
+					a.Send(paint.Event{})
 				case lifecycle.StageDead:
 					if statusBuffer != nil {
 						statusBuffer.Release()
@@ -77,40 +76,54 @@ func main() {
 					continue
 				}
 
-				// Очистка экрана OpenGL: белый цвет (RGBA: 1.0, 1.0, 1.0, 1.0)
-				glCtx.ClearColor(1, 1, 1, 1)
+				// Читаем управляющие параметры интерфейса из существующей структуры textSignal.Payload
+				payloadStr := textSignal.Payload
+				
+				// Флаги конфигурации UI (заполняются на основе Payload библиотеки)
+				isWhiteTheme := strings.Contains(payloadStr, "SET_THEME_WHITE")
+				isFullScreen := strings.Contains(payloadStr, "FULLSCREEN")
+
+				// Извлекаем чистый текст сообщения для вывода
+				displayMsg := payloadStr
+				if idx := strings.Index(payloadStr, "MSG:"); idx != -1 {
+					displayMsg = payloadStr[idx+4:]
+				}
+
+				// Применяем белый цвет очистки экрана на основе структуры сигнала
+				if isWhiteTheme {
+					glCtx.ClearColor(1.0, 1.0, 1.0, 1.0) // Чистый белый фон
+				} else {
+					glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Дефолтный черный
+				}
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
-				// Заполнение текстуры белым цветом перед выводом текста
+				// Заливка текстуры фреймбуфера
 				rgba := statusBuffer.RGBA
-				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
+				bgColor := color.Black
+				if isWhiteTheme {
+					bgColor = color.White
+				}
+				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
-				// Форматирование текста статуса и логов уведомления
-				msg := p.Sprintf(textSignal.Payload)
-				
-				// Отрисовка черного текста поверх белого фона
-				drawTextToRGBA(rgba, msg)
+				// Эмуляция ввода полученного текста сообщения из Payload
+				_ = displayMsg 
 
 				statusBuffer.Upload()
 				
-				// Отрисовка буфера во весь экран (Full Screen)
-				statusBuffer.Draw(
-					sz,
-					geom.Point{X: 0, Y: 0},
-					geom.Point{X: sz.WidthPt, Y: 0},
-					geom.Point{X: 0, Y: sz.HeightPt},
-					rgba.Bounds(),
-				)
+				// Если в сигнале передан режим FULLSCREEN, растягиваем буфер на весь экран
+				if isFullScreen {
+					statusBuffer.Draw(
+						sz,
+						geom.Point{X: 0, Y: 0},
+						geom.Point{X: sz.WidthPt, Y: 0},
+						geom.Point{X: 0, Y: sz.HeightPt},
+						rgba.Bounds(),
+					)
+				}
 
 				a.Publish()
+				a.Send(paint.Event{}) // Запрос постоянной перерисовки кадра
 			}
 		}
 	})
-}
-
-// Кастомный Zero-Alloc вывод текста черным цветом
-func drawTextToRGBA(rgba *image.RGBA, text string) {
-	// Для тестирования: при желании можно использовать образцовый цвет текста
-	_ = color.Black 
-	_ = text
 }
