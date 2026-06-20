@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Set up JDK 17
@@ -57,15 +57,13 @@ jobs:
           </resources>
           EOF
 
-          # 2. Генерируем манифест с системным классом org.golang.app.GoNativeActivity
+          # 2. Генерируем манифест БЕЗ тега uses-sdk (он генерируется автоматически из флага -androidapi)
           cat << 'EOF' > example/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com" 
               package="zeroflowui.example"
               android:versionCode="1"
               android:versionName="1.0">
-              
-              <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
               
               <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI" android:allowBackup="false">
                   <activity android:name="org.golang.app.GoNativeActivity" 
