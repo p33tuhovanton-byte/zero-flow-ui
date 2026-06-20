@@ -19,11 +19,39 @@ jobs:
         with:
           go-version: '1.26'
 
+        # 3. Установка Node.js
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+        with:
+         node-version: '20'
+        cache: 'npm'
+
       - name: Verify Core Module Dependencies
         run: go mod tidy
 
       - name: Validate Core Library Syntax
         run: go build -v .
+
+# 4. Сборка Go внутри каталога zero-flow-ui
+    - name: Build Go application
+      # Переносим рабочее окружение терминала внутрь zero-flow-ui
+      working-directory: ./zero-flow-ui
+      run: |
+        # Команда выполняется там, где лежит go.mod
+        go mod tidy
+        
+        # Компилируем main.go из подпапки example и сохраняем бинарник в корень репозитория
+        go build -o ./my-go-app ./example/main.go
+
+    # 5. Установка зависимостей Node.js и сборка TypeScript в корне
+    - name: Install Node.js dependencies & Build TS
+      run: |
+        npm install
+        npx tsc
+
+# 6. Тестовый запуск проекта
+    - name: Run Application
+      run: npm start
 
   build-android-apk:
     name: Build Native Android APK
