@@ -43,7 +43,6 @@ jobs:
 
       - name: Inject Production Android Manifest and Themes
         run: |
-          # Создаем кастомную структуру ресурсов, которую gomobile внедрит в APK вместо дефолтной
           mkdir -p example/res/values
 
           # 1. Генерируем тему оформления (Белый цвет + Полноэкранный режим)
@@ -58,7 +57,7 @@ jobs:
           </resources>
           EOF
 
-          # 2. Генерируем правильный манифест для Android 11 (API 30)
+          # 2. Генерируем манифест с корректным классом GoNativeActivity для gomobile build
           cat << 'EOF' > example/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com" 
@@ -69,9 +68,11 @@ jobs:
               <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
               
               <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI" android:allowBackup="false">
-                  <activity android:name="org.golang.mobile.AppActivity" 
+                  <!-- Изменено на org.golang.mobile.GoNativeActivity для прохождения валидации компилятора -->
+                  <activity android:name="org.golang.mobile.GoNativeActivity" 
                       android:exported="true"
                       android:configChanges="orientation|keyboardHidden|screenSize">
+                      <meta-data android:name="android.app.lib_name" android:value="example" />
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -83,11 +84,7 @@ jobs:
 
       - name: Build Pure Android APK via Gomobile
         run: |
-          # Очищаем ANDROID_NDK_HOME для обхода бага с platforms.json
           export ANDROID_NDK_HOME=""
-          
-          # Запускаем прямую сборку. Наличие AndroidManifest.xml в папке заставит
-          # gomobile использовать наши кастомные ресурсы и зафиксировать API 30
           gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example
 
       - name: Upload Finished APK Artifact
