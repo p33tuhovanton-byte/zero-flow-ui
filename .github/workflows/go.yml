@@ -7,8 +7,9 @@ on:
     branches: [ main, master ]
 
 jobs:
-  validate-module:
-    name: Validate Core Module Syntax
+  # Шаг 1: Валидация кода и сборка TypeScript-скриптов
+  validate-and-build-ts:
+    name: Build TypeScript and Validate Core
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -24,6 +25,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: './zero-flow-ui/package-lock.json'
 
       - name: Verify Core Module Dependencies
         run: go mod tidy
@@ -31,24 +33,25 @@ jobs:
       - name: Validate Core Library Syntax
         run: go build -v .
 
-      - name: Build Go application
+      - name: Install Node.js dependencies & Build TS
         working-directory: ./zero-flow-ui
         run: |
-          go mod tidy
-          # Компилируем main.go и сохраняем бинарник на уровень выше (в корень репозитория)
-          go build -o ../my-go-app ./example/main.go
-
-      - name: Install Node.js dependencies & Build TS
-        run: |
           npm install
-          npx tsc
+          npx tsc # Компилирует TS в JS (обычно в папку dist/)
 
-      - name: Run Application
-        run: npm start
+      # 🔗 СВЯЗЬ: Сохраняем скомпилированный JavaScript как артефакт
+      - name: Upload Compiled JS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-js-assets
+          path: ./zero-flow-ui/dist/ # Укажите вашу папку вывода из tsconfig.json
 
+  # Шаг 2: Сборка APK с внедрением собранного JavaScript
   build-android-apk:
     name: Build Native Android APK
     runs-on: ubuntu-latest
+    # 🔗 СВЯЗЬ: Не запускать сборку APK, пока не завершится сборка TypeScript
+    needs: validate-and-build-ts
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -72,6 +75,14 @@ jobs:
         with:
           go-version: '1.26'
 
+      # 🔗 СВЯЗЬ: Скачиваем скомпилированный JS-код внутрь этой папки
+      - name: Download JS Artifact for Android Assets
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-js-assets
+          # Скачиваем в папку, которую Go/Gomobile использует как ассеты (например, внутри example)
+          path: ./zero-flow-ui/example/assets/ 
+
       - name: Install Gomobile Tools
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
@@ -79,18 +90,16 @@ jobs:
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Compile Android APK via Gomobile
-        # 🛠️ ИСПРАВЛЕННЫЙ ПУТЬ: Переносим контекст выполнения внутрь каталога zero-flow-ui
         working-directory: ./zero-flow-ui
         run: |
           gomobile init
           go get golang.org/x/mobile@latest
           go mod tidy
-          # Теперь относительный путь ./example отработает корректно, а APK сохранится в zero-flow-ui
+          # Gomobile упакует папку assets/ автоматически внутрь APK
           GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ./example
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: native-android-apk
-          # 🛠️ ИСПРАВЛЕННЫЙ ПУТЬ: Указываем артефакту, что файл лежит внутри папки zero-flow-ui
           path: ./zero-flow-ui/zero-flow.apk
