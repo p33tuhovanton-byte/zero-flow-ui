@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.21'
           cache: true
 
       - name: Set up JDK 17
@@ -43,8 +43,6 @@ jobs:
 
       - name: Inject Production Android Manifest
         run: |
-          # Используем встроенную системную тему NoTitleBar.Fullscreen
-          # Это гарантирует, что компилятор gomobile успешно найдет стиль
           cat << 'EOF' > example/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com" 
@@ -56,7 +54,8 @@ jobs:
                   <activity android:name="org.golang.app.GoNativeActivity" 
                       android:exported="true"
                       android:configChanges="orientation|keyboardHidden|screenSize">
-                      <meta-data android:name="android.app.lib_name" android:value="example" />
+                      <!-- Фикс: gomobile компилирует package main в libmain.so, а не libexample.so -->
+                      <meta-data android:name="android.app.lib_name" android:value="main" />
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -69,7 +68,21 @@ jobs:
       - name: Build Android APK via Gomobile
         run: |
           export ANDROID_NDK_HOME=""
-          gomobile build -androidapi 30 -target=android -o zero-flow.apk ./example
+          gomobile build -androidapi 30 -target=android -o zero-flow-unsigned.apk ./example
+
+      - name: Sign and Align Android APK (Fix Parsing Error)
+        run: |
+          # 1. Находим актуальные инструменты Android SDK Build Tools на сервере
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          
+          # 2. Выполняем оптимизацию выравнивания пикселей пакета
+          $BUILD_TOOLS_DIR/zipalign -v 4 zero-flow-unsigned.apk zero-flow-aligned.apk
+          
+          # 3. Генерируем временное цифровое хранилище ключей (Keystore)
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          
+          # 4. Подписываем приложение сигнатурой v2/v3, которую требует Android 11+
+          $BUILD_TOOLS_DIR/apksigner sign --keystore debug.keystore --storepass android --keypass android --out zero-flow.apk zero-flow-aligned.apk
 
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
