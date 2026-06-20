@@ -1,1 +1,57 @@
-name: Android Gomobile & Gradle Buildon:push:branches: [ main, master ]pull_request:branches: [ main, master ]workflow_dispatch:jobs:build:runs-on: ubuntu-latestenv:GO111MODULE: "on"JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64ANDROID_HOME: /usr/local/lib/android/sdkANDROID_SDK_ROOT: /usr/local/lib/android/sdkANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653steps:- name: Checkout Source Codeuses: actions/checkout@v3- name: Set up Go Development Environmentuses: actions/setup-go@v4with:go-version: '1.21'cache: true- name: Set up JDK 17 (Temurin)uses: actions/setup-java@v3with:java-version: '17'distribution: 'temurin'- name: Initialize Gomobile Toolchainrun: |go install golang.org/x/mobile/cmd/gomobile@latestgomobile init- name: Fetch and Synchronize Go Dependenciesrun: |go get golang.org/x/mobile@latestgo mod tidy- name: Generate Android Directories inside Examplerun: |mkdir -p example/android/app/libsmkdir -p example/android/app/src/main/res/valuesmkdir -p example/android/gradle/wrapper- name: Generate Root build.gradle inside Examplerun: |cat << 'EOF' > example/android/build.gradlebuildscript {repositories {google()mavenCentral()}dependencies {classpath 'com.android.tools.build:gradle:7.4.2'}}allprojects {repositories {google()mavenCentral()}}task clean(type: Delete) {delete rootProject.buildDir}EOF- name: Generate Settings Gradle inside Examplerun: |echo "include ':app'" > example/android/settings.gradle- name: Generate App build.gradle (Target API 30) inside Examplerun: |cat << 'EOF' > example/android/app/build.gradleapply plugin: 'com.android.application'android {compileSdkVersion 30ndkVersion "25.2.9519653"defaultConfig {applicationId "zeroflowui.example"minSdkVersion 21targetSdkVersion 30versionCode 1versionName "1.0"}buildTypes {release {minifyEnabled falseproguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'}}}dependencies {implementation fileTree(dir: 'libs', include: ['.jar', '.aar'])}EOF- name: Generate Fullscreen White Theme inside Examplerun: |cat << 'EOF' > example/android/app/src/main/res/values/themes.xml#FFFFFF#FFFFFF#FFFFFFfalseEOF- name: Generate Production AndroidManifest.xml inside Examplerun: |cat << 'EOF' > example/android/app/src/main/AndroidManifest.xmlEOF- name: Download and Bootstrap Pure Gradle Wrapperrun: |curl -LO githubusercontent.commv gradlew example/android/gradlewchmod +x example/android/gradlewcat << 'EOF' > example/android/gradle/wrapper/gradle-wrapper.propertiesdistributionBase=GRADLE_USER_HOMEdistributionPath=wrapper/distsdistributionUrl=gradle.orgzipStoreBase=GRADLE_USER_HOMEzipStorePath=wrapper/distsEOFcurl -Lo example/android/gradle/wrapper/gradle-wrapper.jar github.com- name: Execute Gomobile Bind into Example Libsrun: |gomobile bind -androidapi 30 -target=android -o ./example/android/app/libs/zero_flow.aar ./example- name: Compile Fullscreen White Android APK via Gradlerun: |cd example/android./gradlew assembleDebug- name: Upload Compiled Production APK Artifactuses: actions/upload-artifact@v3with:name: zero-flow-api30-apppath: example/android/app/build/outputs/apk/debug/app-debug.apk
+Название: Android Gomobile Pure Build
+
+на:  
+Пуш:  
+ветви: [главные, основные]  
+pull_request:  
+ветви: [главные, основные]  
+workflow_dispatch:
+
+Работа:  
+построить:  
+Исполняется: Ubuntu-Latest
+
+env:  
+GO111MODULE: "Вкл  
+JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64  
+ANDROID_HOME: /usr/local/lib/android/sdk  
+ANDROID_SDK_ROOT: /USR/локальный/либ/андроид/СДК  
+Android_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+
+Шаги:  
+- Название: Исходный код для оформления заказа  
+Использование: actions/checkout@v3
+
+- имя: Настроить среду разработки Go  
+Используется: actions/setup-go@v4  
+с:  
+Версия Go: "1.21"  
+кэш: true
+
+Название: Настройка JDK 17 (необходимо для использования в Android Tools)  
+Применение: Actions/setup-java@v3  
+с:  
+Java-версия: '17'  
+распространение: 'темурин'
+
+Название: Инициализация цепочки инструментов Gomobile  
+Бег: |  
+go install golang.org/x/mobile/cmd/gomobile@latest  
+gomobile init
+
+- имя: Получить и синхронизировать зависимости Go  
+Бег: |  
+Перейдите на сайт golang.org/x/mobile@latest  
+Го мод аккуратно
+
+- Название: Build Android APK через Pure Gomobile Tag  
+Бег: |  
+# Прямая сборка монолитного APK под Android 11 (API 30)  
+# Логика белого фона и полноэкранного режима теперь работает на уровне Go-кода  
+сборка GOMOBILE - androidapi 30 -target=android -o zero-flow.apk ./example
+
+- Название: Загрузите собранный чистый артефакт в формате APK  
+Использование: actions/upload-artifact@v3  
+с:  
+Название: zero-flow-pure-go-apk  
+путь: zero-flow.apk
