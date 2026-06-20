@@ -12,7 +12,7 @@ build:
 runs-on: ubuntu-latest 
 
 env:  
-GO111MODULE: on  
+GO111MODULE: "on"  
 JAVA\_HOME: /opt/hostedtoolcache/Java\_Temurin-Hotspot\_jdk/17.0.19-10/x64  
 ANDROID\_HOME: /usr/local/lib/android/sdk  
 ANDROID\_SDK\_ROOT: /usr/local/lib/android/sdk  
@@ -139,12 +139,10 @@ EOF 
 
 \- name: Download and Bootstrap Pure Gradle Wrapper  
 run: |  
-\# Скачиваем официальные исполняемые файлы сборщика Gradle версии 7.5  
 curl -LO githubusercontent.com  
 mv gradlew example/android/gradlew  
 chmod +x example/android/gradlew 
 
-\# Генерируем конфигурацию загрузчика  
 cat << 'EOF' > example/android/gradle/wrapper/gradle-wrapper.properties  
 distributionBase=GRADLE\_USER\_HOME  
 distributionPath=wrapper/dists  
@@ -153,7 +151,6 @@ zipStoreBase=GRADLE\_USER\_HOME
 zipStorePath=wrapper/dists  
 EOF 
 
-\# Скачиваем jar-загрузчик Gradle  
 curl -Lo example/android/gradle/wrapper/gradle-wrapper.jar github.com 
 
 \- name: Execute Gomobile Bind into Example Libs  
