@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
       - name: Set up JDK 17
@@ -43,7 +43,6 @@ jobs:
 
       - name: Inject Production Android Manifest
         run: |
-          # Создаем полностью независимую конфигурацию манифеста
           cat << 'EOF' > example/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com" 
@@ -51,7 +50,11 @@ jobs:
               android:versionCode="1"
               android:versionName="1.0">
               
-              <application android:label="ZeroFlowUI" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:allowBackup="false">
+              <!-- extractNativeLibs=true принудительно разрешает Android 11 читать скомпилированный Go-код -->
+              <application android:label="ZeroFlowUI" 
+                  android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
+                  android:extractNativeLibs="true"
+                  android:allowBackup="false">
                   <activity android:name="org.golang.app.GoNativeActivity" 
                       android:exported="true"
                       android:configChanges="orientation|keyboardHidden|screenSize">
@@ -65,27 +68,25 @@ jobs:
           </manifest>
           EOF
 
-      - name: Build Pure Android APK via Gomobile
+      - name: Build Genuine Android APK via Gomobile
         run: |
-          # 1. Принудительно очищаем ANDROID_NDK_HOME, чтобы убрать ошибку platforms.json
           export ANDROID_NDK_HOME=""
           
-          # 2. Вызываем компиляцию fat-пакета со встроенной поддержкой стандартного манифеста
-          gomobile build -androidapi 30 -o zero-flow-unsigned.apk ./example
+          # Жестко фиксируем целевую архитектуру arm64 для вашего телефона через двоеточие (стандарт gomobile)
+          gomobile build -androidapi 30 -target=android/arm64 -o zero-flow-unsigned.apk ./example
 
       - name: Sign and Align Android APK (Fix Parsing Error)
         run: |
-          # 1. Находим инструменты сборки Android SDK Build Tools
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           
-          # 2. Оптимизируем выравнивание внутренней структуры ZIP-архива
-          $BUILD_TOOLS_DIR/zipalign -v 4 zero-flow-unsigned.apk zero-flow-aligned.apk
+          # Оптимизируем выравнивание пикселей структуры ZIP-архива
+          $BUILD_TOOLS_DIR/zipalign -f -v 4 zero-flow-unsigned.apk zero-flow-aligned.apk
           
-          # 3. Генерируем валидную пару ключей для цифровой подписи (Keystore)
+          # Генерируем валидную пару ключей для цифровой подписи
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
-          # 4. Подписываем приложение с использованием нового флага --ks
-          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out zero-flow.apk zero-flow-aligned.apk
+          # Подписываем приложение с включением современных криптографических схем v2/v3
+          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out zero-flow.apk zero-flow-aligned.apk
 
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
