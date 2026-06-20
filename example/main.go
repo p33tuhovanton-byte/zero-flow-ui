@@ -162,15 +162,17 @@ func main() {
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
 				}
-									case paint.Event:
+							case paint.Event:
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
 				}
 
-				// ИСПРАВЛЕНИЕ ОПЕЧАТКИ: Использованы точные системные имена sz.WidthPx и sz.HeightPx
+				// ТОЧЕЧНОЕ РАЗДЕЛЕНИЕ ТИПОВ ДЛЯ GL API АНДРОИД
+				// Viewport принимает нативный int, а Scissor требует строго int32.
+				// Преобразование выполняется на уровне регистров CPU (0 allocs/op).
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-				glCtx.Scissor(0, 0, sz.WidthPx, sz.HeightPx)
+				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
 				
 				glCtx.Enable(gl.SCISSOR_TEST)
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
