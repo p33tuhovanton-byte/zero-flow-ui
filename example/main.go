@@ -16,21 +16,22 @@ import (
 	"zeroflowui"
 )
 
-// Декларативный интерфейс символа, оперирующий исключительно типом byte
+// Декларативный интерфейс конвейера атласа. Метод больше ничего не возвращает (void/без return).
 type GlyphDecorator interface {
-	RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool
+	RenderGlyph(dst draw.Image, charCode byte, x byte, y byte)
 }
 
+// Терминальный декоратор — просто тупик конвейера, завершающий сквозной проход
 type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
-	return false 
+func (e EmptyGlyph) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
+	// Конец цепочки. Нет return, поток просто завершается.
 }
 
-// Структурный декоратор символа 'W'. Хранит маску 8x8 как 8 независимых байт-констант
+// Декоратор символа 'W'
 type GlyphW struct {
 	Next GlyphDecorator
 }
-func (g GlyphW) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
+func (g GlyphW) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 	if charCode == 87 { // ASCII 'W'
 		blitRow(dst, 0x42, x, y + 0)
 		blitRow(dst, 0x42, x, y + 1)
@@ -39,16 +40,16 @@ func (g GlyphW) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool 
 		blitRow(dst, 0x54, x, y + 4)
 		blitRow(dst, 0x64, x, y + 5)
 		blitRow(dst, 0x42, x, y + 6)
-		return true
 	}
-	return g.Next.RenderGlyph(dst, charCode, x, y)
+	// Безусловный сквозной проход дальше по конвейеру без прерывания
+	g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-// Структурный декоратор символа 'O'
+// Декоратор символа 'O'
 type GlyphO struct {
 	Next GlyphDecorator
 }
-func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
+func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 	if charCode == 79 { // ASCII 'O'
 		blitRow(dst, 0x3C, x, y + 0)
 		blitRow(dst, 0x42, x, y + 1)
@@ -57,16 +58,15 @@ func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool 
 		blitRow(dst, 0x42, x, y + 4)
 		blitRow(dst, 0x42, x, y + 5)
 		blitRow(dst, 0x3C, x, y + 6)
-		return true
 	}
-	return g.Next.RenderGlyph(dst, charCode, x, y)
+	g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-// Структурный декоратор символа 'K'
+// Декоратор символа 'K'
 type GlyphK struct {
 	Next GlyphDecorator
 }
-func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
+func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 	if charCode == 75 { // ASCII 'K'
 		blitRow(dst, 0x42, x, y + 0)
 		blitRow(dst, 0x44, x, y + 1)
@@ -75,18 +75,14 @@ func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool 
 		blitRow(dst, 0x48, x, y + 4)
 		blitRow(dst, 0x44, x, y + 5)
 		blitRow(dst, 0x42, x, y + 6)
-		return true
 	}
-	return g.Next.RenderGlyph(dst, charCode, x, y)
+	g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-// Безопасный побайтовый блиттинг строки без ручного вычисления Stride и риска переполнения
 func blitRow(dst draw.Image, bits byte, startX byte, y byte) {
-	// Подготавливаем статический пиксельный квад размером 4x4 для масштабирования текста
 	rect := image.Rect(0, 0, 4, 4)
 	blackSrc := &image.Uniform{color.Black}
 
-	// Побитовый разбор строки. Вызов draw.Draw выполняется на уровне ассемблера (0 allocs/op)
 	if (bits & 0x80) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+0*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
 	if (bits & 0x40) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+1*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
 	if (bits & 0x20) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+2*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
@@ -149,7 +145,6 @@ func main() {
 				a.Send(paint.Event{})
 			case touch.Event:
 				if x.Type == touch.TypeBegin {
-					// In-place изменение состояния ячеек структуры
 					uiState.Char1 = 79 // 'O'
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
@@ -160,22 +155,19 @@ func main() {
 					continue
 				}
 
-				// Фиксация вьюпорта
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
 				glCtx.Enable(gl.SCISSOR_TEST)
-				
-				// Полная очистка экрана в белый цвет
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				// Декларативный вызов цепочки декораторов по отдельным byte-координатам (0 аллокаций)
 				var startX byte = 10
 				var startY byte = 30
 
+				// Вызовы выполняются сквозным образом, гарантируя отсутствие зависаний стека
 				atlasChain.RenderGlyph(rgba, uiState.Char1, startX, startY)
 				atlasChain.RenderGlyph(rgba, uiState.Char2, startX + 10, startY)
 
