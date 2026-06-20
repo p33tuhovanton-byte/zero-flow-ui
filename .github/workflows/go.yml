@@ -34,12 +34,19 @@ jobs:
         with:
           go-version: '1.26'
 
+      # --- НАСТРОЙКА NODE.JS ОКРУЖЕНИЯ ---
       - name: Set up Node.js environment
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-          cache-dependency-path: 'package.json' # Исправлен путь к корню
+          cache-dependency-path: 'package.json'
+
+      # --- ШАГ 1: СБОРКА GO-КОДА СРЕДСТВАМИ NODE.JS ---
+      - name: Build Go Project via NPM Scripts
+        run: |
+          npm install
+          npm run build:go
 
       # --- ШАГ 1: СБОРКА И ПРОВЕРКА ТИПОВ TYPESCRIPT ---
       - name: Install Node.js dependencies & Build TS
