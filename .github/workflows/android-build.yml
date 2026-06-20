@@ -1,4 +1,4 @@
-name: Android Go and Gradle Build
+name: Android Gradle and Gobind Plugin Build
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build Android Project with Gradle and Go
+    name: Build via Gradle Gobind Plugin
     runs-on: ubuntu-latest
 
     env:
@@ -17,7 +17,6 @@ jobs:
       JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.19-10/x64
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
     steps:
       - name: Checkout Source Code
@@ -26,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.21'
           cache: true
 
       - name: Set up JDK 17
@@ -39,38 +38,44 @@ jobs:
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           gomobile init
-
-      - name: Fetch and Synchronize Go Dependencies
-        run: |
           go get golang.org/x/mobile@latest
           go mod tidy
 
-      - name: Generate Android Project Structure
+      - name: Create Structure for Gradle Project
         run: |
-          mkdir -p example/android/app/libs
           mkdir -p example/android/app/src/main/res/values
 
-      - name: Create Base Gradle Files
+      - name: Generate Root build.gradle with Gobind Plugin
         run: |
           echo "include ':app'" > example/android/settings.gradle
           
           cat << 'EOF' > example/android/build.gradle
           buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:7.4.2' }
+              repositories { 
+                  google()
+                  mavenCentral()
+                  maven { url "https://google.com" }
+              }
+              dependencies { 
+                  classpath 'com.android.tools.build:gradle:7.4.2'
+                  classpath 'org.golang.mobile:bind:0.2.0'
+              }
           }
           allprojects {
               repositories { google(); mavenCentral() }
           }
           EOF
 
-      - name: Create App Level build.gradle
+      - name: Generate App build.gradle (Target API 30 + Gobind Tag)
         run: |
           cat << 'EOF' > example/android/app/build.gradle
           apply plugin: 'com.android.application'
+          apply plugin: 'org.golang.mobile.bind'
+
           android {
               compileSdkVersion 30
               ndkVersion "25.2.9519653"
+              
               defaultConfig {
                   applicationId "zeroflowui.example"
                   minSdkVersion 21
@@ -79,12 +84,15 @@ jobs:
                   versionName "1.0"
               }
           }
-          dependencies {
-              implementation fileTree(dir: 'libs', include: ['*.aar'])
+
+          gobind {
+              pkg = "../../example" 
+              GOOS = ["android"]
+              GOARCH = ["arm", "arm64"]
           }
           EOF
 
-      - name: Create Fullscreen Themes and Manifest
+      - name: Generate Fullscreen Themes & AndroidManifest.xml
         run: |
           cat << 'EOF' > example/android/app/src/main/res/values/themes.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -92,6 +100,7 @@ jobs:
               <style name="Theme.ZeroFlowUI" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
                   <item name="android:windowBackground">#FFFFFF</item>
                   <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:navigationBarColor">#FFFFFF</item>
               </style>
           </resources>
           EOF
@@ -99,7 +108,7 @@ jobs:
           cat << 'EOF' > example/android/app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com" package="zeroflowui.example">
-              <application android:label="ZeroFlowUI" android:theme="@style/Theme.ZeroFlowUI">
+              <application android:label="ZeroFlowUI Gradle App" android:theme="@style/Theme.ZeroFlowUI">
                   <activity android:name="org.golang.mobile.AppActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -110,24 +119,15 @@ jobs:
           </manifest>
           EOF
 
-      - name: Compile Go Code into Native Android Library (.aar)
-        run: |
-          # Принудительно очищаем ANDROID_NDK_HOME для обхода бага с platforms.json
-          export ANDROID_NDK_HOME=""
-          
-          # Запускаем сборку нативного AAR-пакета под Android 11 (API 30)
-          gomobile bind -androidapi 30 -target=android -o ./example/android/app/libs/zero_flow.aar ./example
-
-      # ЭТАП УСТАНОВКИ И НАСТРОЙКИ GRADLE С ПОМОЩЬЮ ОФИЦИАЛЬНОГО ЭКШЕНА
-      - name: Setup and Execute Gradle
+      - name: Set up and Run Gradle (Compiles Go and APK together)
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 7.5
           build-root-directory: example/android
-          arguments: assembleDebug
+          arguments: assembleDebug -Dorg.gradle.environment.ANDROID_NDK_HOME=""
 
-      - name: Upload Compiled APK Artifact
+      - name: Upload Finished Gradle APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-flow-gradle-apk
-          path: example/android/app/build/outputs/apk/debug/app-zerro-flow-ui.apk
+          name: zero-flow-gobind-plugin-apk
+          path: example/android/app/build/outputs/apk/debug/app-zero-flow-ui.apk
