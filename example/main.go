@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"unsafe" // Прямое управление указателями памяти процессора
 
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
@@ -16,6 +17,7 @@ import (
 	"zeroflowui"
 )
 
+// Декларативный интерфейс блиттинга, оперирующий исключительно типом byte
 type GlyphDecorator interface {
 	RenderGlyph(dst draw.Image, charCode byte, x byte, y byte)
 }
@@ -72,7 +74,7 @@ func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 }
 
 func blitRow(dst draw.Image, bits byte, startX byte, y byte) {
-	rect := image.Rect(0, 0, 6, 6) // Увеличен размер пикселя для лучшей видимости
+	rect := image.Rect(0, 0, 6, 6)
 	blackSrc := &image.Uniform{color.Black}
 
 	if (bits & 0x80) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+0*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
@@ -114,69 +116,79 @@ func main() {
 
 	app.Main(func(a app.App) {
 		for e := range a.Events() {
-			switch x := a.Filter(e).(type) {
-			case lifecycle.Event:
-				switch x.To {
-				case lifecycle.StageAlive:
-					if ctx, ok := x.DrawContext.(gl.Context); ok {
-						glCtx = ctx
-						images = glutil.NewImages(glCtx)
-					}
+			// ЛИНЕЙНЫЙ ФИЛЬТР СОБЫТИЙ БЕЗ SWITCH И СВЯЗАННЫХ КОЛЛЕКЦИЙ
+
+			// 1. Обработка Жизненного Цикла через unsafe (без проверки ctx, ok)
+			if ev, ok := e.(lifecycle.Event); ok {
+				if ev.To == lifecycle.StageAlive {
+					// Читаем интерфейс DrawContext прямо из памяти по указателю (0 allocs)
+					glCtx = *(*gl.Context)(unsafe.Pointer(&ev.DrawContext))
+					images = glutil.NewImages(glCtx)
 					a.Send(paint.Event{})
-				case lifecycle.StageDead:
+				}
+				if ev.To == lifecycle.StageVisible {
+					a.Send(paint.Event{})
+				}
+				if ev.To == lifecycle.StageFocused {
+					glCtx = *(*gl.Context)(unsafe.Pointer(&ev.DrawContext))
+					a.Send(paint.Event{})
+				}
+				if ev.To == lifecycle.StageDead {
 					if statusBuffer != nil { statusBuffer.Release() }
 					if images != nil { images.Release() }
 					glCtx = nil
 				}
-			case size.Event:
-				sz = x
+			}
+
+			// 2. Срез события размеров экрана (без создания промежуточных переменных)
+			if ev, ok := e.(size.Event); ok {
+				sz = ev
 				if glCtx != nil && images != nil {
 					if statusBuffer != nil { statusBuffer.Release() }
 					statusBuffer = images.NewImage(sz.WidthPx, sz.HeightPx)
 				}
 				a.Send(paint.Event{})
-			case touch.Event:
-				if x.Type == touch.TypeBegin {
+			}
+
+			// 3. Тапы по экрану
+			if ev, ok := e.(touch.Event); ok {
+				if ev.Type == touch.TypeBegin {
 					uiState.Char1 = 79 // 'O'
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
 				}
-			case paint.Event:
+			}
+
+			// 4. Графический цикл Paint
+			if _, ok := e.(paint.Event); ok {
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
 				}
 
-				// АППАРАТНЫЙ СБРОС СИСТЕМНОЙ ТЕМЫ: Растягиваем контекст на физические пиксели экрана
-				// Это принудительно перекрывает черную плашку "Example" сверху
-				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-				glCtx.Disable(gl.SCISSOR_TEST) // Отключаем тест отсечения для полного игнорирования границ Window
+				// Извлекаем размеры фреймбуфера напрямую из внутренней памяти Bounds
+				// Это исключает ручное приведение int32(sz.WidthPx), убирая ошибку "cannot use h32"
+				rectMax := statusBuffer.RGBA.Bounds().Max
 
-				// Заливка кадра белым цветом на уровне GPU
+				glCtx.Viewport(0, 0, rectMax.X, rectMax.Y)
+				glCtx.Scissor(0, 0, *(*int32)(unsafe.Pointer(&rectMax.X)), *(*int32)(unsafe.Pointer(&rectMax.Y)))
+				glCtx.Disable(gl.SCISSOR_TEST)
+
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				// Координаты смещены ниже (startY = 60), чтобы текст гарантированно вышел из-под системной зоны
 				var startX byte = 20
 				var startY byte = 60
 
+				// Сквозной выкат цепочки декораторов по byte-координатам без return
 				atlasChain.RenderGlyph(rgba, uiState.Char1, startX, startY)
 				atlasChain.RenderGlyph(rgba, uiState.Char2, startX + 12, startY)
 
 				statusBuffer.Upload()
-				
-				// ЖЕСТКАЯ ОТРИСОВКА ПОВЕРХ ВСЕХ СЛОЕВ ОКНА (Полный экран)
-				statusBuffer.Draw(
-					sz,
-					geom.Point{X: 0, Y: 0},
-					geom.Point{X: sz.WidthPt, Y: 0},
-					geom.Point{X: 0, Y: sz.HeightPt},
-					rgba.Bounds(),
-				)
+				statusBuffer.Draw(sz, geom.Point{}, geom.Point{X: sz.WidthPt}, geom.Point{Y: sz.HeightPt}, rgba.Bounds())
 				
 				glCtx.Flush()
 				a.Publish()
