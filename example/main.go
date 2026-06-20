@@ -162,14 +162,13 @@ func main() {
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
 				}
-						case paint.Event:
+									case paint.Event:
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
 				}
 
-				// ЧИСТЫЙ СКВОЗНОЙ ВЫЗОВ СИСТЕМНЫХ ПАРАМЕТРОВ БЕЗ ПРИВЕДЕНИЯ ТИПОВ
-				// Оба метода в данном API принимают нативный тип int.
+				// ИСПРАВЛЕНИЕ ОПЕЧАТКИ: Использованы точные системные имена sz.WidthPx и sz.HeightPx
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				glCtx.Scissor(0, 0, sz.WidthPx, sz.HeightPx)
 				
