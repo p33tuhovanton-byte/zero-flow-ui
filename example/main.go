@@ -17,18 +17,15 @@ import (
 )
 
 func main() {
-	// 1. Используем штатную сборку истории UI из вашей библиотеки
 	uiTimeline := zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-	// 2. Управляем интерфейсом через структуру TextSignal "из коробки"
-	// Используем специальный синтаксис внутри Payload для передачи команд действия (Action)
+	// Управляем интерфейсом через штатный Payload
 	textSignal := zeroflowui.TextSignal{
 		Type:    zeroflowui.TextType,
-		Payload: "CMD:SET_THEME_WHITE|MODE:FULLSCREEN|MSG:Zero-Collection UI активен на Android 11!\n",
+		Payload: "CMD:SET_THEME_WHITE|MODE:FULLSCREEN|MSG:Zero-Collection UI активен!",
 	}
 
-	// 3. Стандартный декоратор конвейера из вашей библиотеки
 	pipeline := zeroflowui.SystemPipelineDecorator{
 		Next: zeroflowui.TerminalProcessor{},
 	}
@@ -44,14 +41,14 @@ func main() {
 			case lifecycle.Event:
 				switch x.To {
 				case lifecycle.StageFocused:
-					// Передаем сигнал в конвейер обработки zeroflowui без изменений кода библиотеки
 					pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
 				case lifecycle.StageAlive:
-					glCtx, _ = x.DrawContext.(gl.Context)
-					if glCtx != nil {
+					// Принудительно извлекаем контекст драйвера Android
+					if ctx, ok := x.DrawContext.(gl.Context); ok {
+						glCtx = ctx
 						images = glutil.NewImages(glCtx)
 					}
-					a.Send(paint.Event{})
+					a.Send(paint.Event{}) // Инициируем первый цикл отрисовки
 				case lifecycle.StageDead:
 					if statusBuffer != nil {
 						statusBuffer.Release()
@@ -65,39 +62,34 @@ func main() {
 				}
 			case size.Event:
 				sz = x
+				// Пересоздаем буфер строго под новые размеры экрана
 				if glCtx != nil && images != nil {
 					if statusBuffer != nil {
 						statusBuffer.Release()
 					}
 					statusBuffer = images.NewImage(sz.WidthPx, sz.HeightPx)
 				}
+				a.Send(paint.Event{})
 			case paint.Event:
+				// Если Android еще не подготовил контекст, запрашиваем paint повторно
 				if glCtx == nil || images == nil || statusBuffer == nil {
+					a.Send(paint.Event{})
 					continue
 				}
 
-				// Читаем управляющие параметры интерфейса из существующей структуры textSignal.Payload
 				payloadStr := textSignal.Payload
-				
-				// Флаги конфигурации UI (заполняются на основе Payload библиотеки)
 				isWhiteTheme := strings.Contains(payloadStr, "SET_THEME_WHITE")
 				isFullScreen := strings.Contains(payloadStr, "FULLSCREEN")
 
-				// Извлекаем чистый текст сообщения для вывода
-				displayMsg := payloadStr
-				if idx := strings.Index(payloadStr, "MSG:"); idx != -1 {
-					displayMsg = payloadStr[idx+4:]
-				}
-
-				// Применяем белый цвет очистки экрана на основе структуры сигнала
+				// 1. Жёсткая очистка основного экрана Android через glCtx напрямую
 				if isWhiteTheme {
-					glCtx.ClearColor(1.0, 1.0, 1.0, 1.0) // Чистый белый фон
+					glCtx.ClearColor(1.0, 1.0, 1.0, 1.0) // Белый
 				} else {
-					glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Дефолтный черный
+					glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Черный
 				}
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
-				// Заливка текстуры фреймбуфера
+				// 2. Синхронизируем пиксельную карту фреймбуфера
 				rgba := statusBuffer.RGBA
 				bgColor := color.Black
 				if isWhiteTheme {
@@ -105,12 +97,10 @@ func main() {
 				}
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
-				// Эмуляция ввода полученного текста сообщения из Payload
-				_ = displayMsg 
-
+				// Загружаем текстуру в память GPU
 				statusBuffer.Upload()
 				
-				// Если в сигнале передан режим FULLSCREEN, растягиваем буфер на весь экран
+				// 3. Вывод на полный экран с принудительным игнорированием системных отступов
 				if isFullScreen {
 					statusBuffer.Draw(
 						sz,
@@ -122,7 +112,9 @@ func main() {
 				}
 
 				a.Publish()
-				a.Send(paint.Event{}) // Запрос постоянной перерисовки кадра
+				
+				// Зацикливаем paint.Event, чтобы Android не успевал подменить холст на дефолтный серый
+				a.Send(paint.Event{})
 			}
 		}
 	})
