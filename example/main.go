@@ -16,93 +16,96 @@ import (
 	"zeroflowui"
 )
 
-// Интерфейс декоратора символа. Никаких массивов в аргументах.
+// GlyphDecorator оперирует исключительно типом byte
 type GlyphDecorator interface {
-	RenderGlyph(rgba *image.RGBA, charCode byte, x, y, scale int) bool
+	RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool
 }
 
-// Терминальный декоратор (конец цепочки атласа)
 type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(rgba *image.RGBA, charCode byte, x, y, scale int) bool {
-	return false // Символ не найден в атласе
+func (e EmptyGlyph) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
+	return false 
 }
 
-// Структурный декоратор для символа 'W'
 type GlyphW struct {
 	Next GlyphDecorator
 }
-func (g GlyphW) RenderGlyph(rgba *image.RGBA, charCode byte, x, y, scale int) bool {
+func (g GlyphW) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
 	if charCode == 87 { // ASCII 'W'
-		// Построчный накат битовой маски 8x8 через примитивные вызовы (0 аллокаций)
-		drawRow(rgba, 0x42, x, y+0*scale, scale)
-		drawRow(rgba, 0x42, x, y+1*scale, scale)
-		drawRow(rgba, 0x42, x, y+2*scale, scale)
-		drawRow(rgba, 0x4A, x, y+3*scale, scale)
-		drawRow(rgba, 0x54, x, y+4*scale, scale)
-		drawRow(rgba, 0x64, x, y+5*scale, scale)
-		drawRow(rgba, 0x42, x, y+6*scale, scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
+		drawRow(rgba, 0x4A, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
+		drawRow(rgba, 0x54, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
+		drawRow(rgba, 0x64, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, x, y, scale)
+	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
 }
 
-// Структурный декоратор для символа 'O'
 type GlyphO struct {
 	Next GlyphDecorator
 }
-func (g GlyphO) RenderGlyph(rgba *image.RGBA, charCode byte, x, y, scale int) bool {
+func (g GlyphO) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
 	if charCode == 79 { // ASCII 'O'
-		drawRow(rgba, 0x3C, x, y+0*scale, scale)
-		drawRow(rgba, 0x42, x, y+1*scale, scale)
-		drawRow(rgba, 0x42, x, y+2*scale, scale)
-		drawRow(rgba, 0x42, x, y+3*scale, scale)
-		drawRow(rgba, 0x42, x, y+4*scale, scale)
-		drawRow(rgba, 0x42, x, y+5*scale, scale)
-		drawRow(rgba, 0x3C, x, y+6*scale, scale)
+		drawRow(rgba, 0x3C, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
+		drawRow(rgba, 0x3C, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, x, y, scale)
+	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
 }
 
-// Структурный декоратор для символа 'K'
 type GlyphK struct {
 	Next GlyphDecorator
 }
-func (g GlyphK) RenderGlyph(rgba *image.RGBA, charCode byte, x, y, scale int) bool {
+func (g GlyphK) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
 	if charCode == 75 { // ASCII 'K'
-		drawRow(rgba, 0x42, x, y+0*scale, scale)
-		drawRow(rgba, 0x44, x, y+1*scale, scale)
-		drawRow(rgba, 0x48, x, y+2*scale, scale)
-		drawRow(rgba, 0x70, x, y+3*scale, scale)
-		drawRow(rgba, 0x48, x, y+4*scale, scale)
-		drawRow(rgba, 0x44, x, y+5*scale, scale)
-		drawRow(rgba, 0x42, x, y+6*scale, scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
+		drawRow(rgba, 0x44, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
+		drawRow(rgba, 0x48, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
+		drawRow(rgba, 0x70, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
+		drawRow(rgba, 0x48, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
+		drawRow(rgba, 0x44, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
+		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, x, y, scale)
+	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
 }
 
-// Вспомогательная функция отрисовки битов строки (0 аллокаций)
-func drawRow(rgba *image.RGBA, bits byte, startX, y, scale int) {
-	if (bits & 0x80) != 0 { drawPixelBlock(rgba, startX+0*scale, y, scale) }
-	if (bits & 0x40) != 0 { drawPixelBlock(rgba, startX+1*scale, y, scale) }
-	if (bits & 0x20) != 0 { drawPixelBlock(rgba, startX+2*scale, y, scale) }
-	if (bits & 0x10) != 0 { drawPixelBlock(rgba, startX+3*scale, y, scale) }
-	if (bits & 0x08) != 0 { drawPixelBlock(rgba, startX+4*scale, y, scale) }
-	if (bits & 0x04) != 0 { drawPixelBlock(rgba, startX+5*scale, y, scale) }
-	if (bits & 0x02) != 0 { drawPixelBlock(rgba, startX+6*scale, y, scale) }
-	if (bits & 0x01) != 0 { drawPixelBlock(rgba, startX+7*scale, y, scale) }
+func drawRow(rgba *image.RGBA, bits byte, xHigh, xLow, yHigh, yLow, scale byte) {
+	if (bits & 0x80) != 0 { drawPixelBlock(rgba, xHigh, xLow + (0 * scale), yHigh, yLow, scale) }
+	if (bits & 0x40) != 0 { drawPixelBlock(rgba, xHigh, xLow + (1 * scale), yHigh, yLow, scale) }
+	if (bits & 0x20) != 0 { drawPixelBlock(rgba, xHigh, xLow + (2 * scale), yHigh, yLow, scale) }
+	if (bits & 0x10) != 0 { drawPixelBlock(rgba, xHigh, xLow + (3 * scale), yHigh, yLow, scale) }
+	if (bits & 0x08) != 0 { drawPixelBlock(rgba, xHigh, xLow + (4 * scale), yHigh, yLow, scale) }
+	if (bits & 0x04) != 0 { drawPixelBlock(rgba, xHigh, xLow + (5 * scale), yHigh, yLow, scale) }
+	if (bits & 0x02) != 0 { drawPixelBlock(rgba, xHigh, xLow + (6 * scale), yHigh, yLow, scale) }
+	if (bits & 0x01) != 0 { drawPixelBlock(rgba, xHigh, xLow + (7 * scale), yHigh, yLow, scale) }
 }
 
-func drawPixelBlock(rgba *image.RGBA, startX, startY, scale int) {
-	for sy := 0; sy < scale; sy++ {
-		for sx := 0; sx < scale; sx++ {
-			rgba.SetRGBA(startX+sx, startY+sy, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+func drawPixelBlock(rgba *image.RGBA, xHigh, xLow, yHigh, yLow, scale byte) {
+	var sy byte
+	var sx byte
+	for sy = 0; sy < scale; sy++ {
+		for sx = 0; sx < scale; sx++ {
+			finalX := (int(xHigh) << 8) + int(xLow + sx)
+			finalY := (int(yHigh) << 8) + int(yLow + sy)
+			
+			pixOffset := (finalY * rgba.Stride) + (finalX * 4)
+
+			rgba.Pix[pixOffset+0] = 0   // R
+			rgba.Pix[pixOffset+1] = 0   // G
+			rgba.Pix[pixOffset+2] = 0   // B
+			rgba.Pix[pixOffset+3] = 255 // A
 		}
 	}
 }
 
-// Управляющая структура состояния UI без использования массивов
 type UIValueState struct {
 	Char1 byte
 	Char2 byte
@@ -112,13 +115,11 @@ func main() {
 	uiTimeline := zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-	// Статическое состояние UI-символов
 	uiState := &UIValueState{
 		Char1: 87, // 'W'
 		Char2: 87, // 'W'
 	}
 
-	// Собираем структурный атлас через декораторы
 	atlasChain := GlyphW{
 		Next: GlyphO{
 			Next: GlyphK{
@@ -157,7 +158,6 @@ func main() {
 				a.Send(paint.Event{})
 			case touch.Event:
 				if x.Type == touch.TypeBegin {
-					// Атомарное изменение состояния ячеек структуры полей
 					uiState.Char1 = 79 // 'O'
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
@@ -168,8 +168,12 @@ func main() {
 					continue
 				}
 
-				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-				glCtx.Scissor(0, 0, sz.WidthPx, sz.HeightPx)
+				// ИСПРАВЛЕНИЕ: Явное приведение типов int к int32 на границе системного вызова Android API
+				w32 := int32(sz.WidthPx)
+				h32 := int32(sz.HeightPx)
+
+				glCtx.Viewport(0, 0, w32, h32)
+				glCtx.Scissor(0, 0, w32, h32)
 				glCtx.Enable(gl.SCISSOR_TEST)
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
@@ -177,9 +181,15 @@ func main() {
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				// Программный вызов цепочки декораторов по отдельным полям
-				atlasChain.RenderGlyph(rgba, uiState.Char1, 40, 120, 4)
-				atlasChain.RenderGlyph(rgba, uiState.Char2, 80, 120, 4)
+				var xHigh byte = 0
+				var xLow1 byte = 40
+				var xLow2 byte = 80
+				var yHigh byte = 0
+				var yLow byte = 120
+				var textScale byte = 4
+
+				atlasChain.RenderGlyph(rgba, uiState.Char1, xHigh, xLow1, yHigh, yLow, textScale)
+				atlasChain.RenderGlyph(rgba, uiState.Char2, xHigh, xLow2, yHigh, yLow, textScale)
 
 				statusBuffer.Upload()
 				statusBuffer.Draw(sz, geom.Point{}, geom.Point{X: sz.WidthPt}, geom.Point{Y: sz.HeightPt}, rgba.Bounds())
