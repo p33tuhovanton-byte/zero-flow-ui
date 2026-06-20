@@ -10,6 +10,7 @@ import (
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/exp/gl/glutil"
+	"golang.org/x/mobile/geom" // Добавлен импорт для работы с координатами экрана
 	"golang.org/x/mobile/gl"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -62,12 +63,11 @@ func main() {
 				}
 			case size.Event:
 				sz = x
-				// Пересоздаем буфер кадра при изменении экрана/ориентации устройства
 				if glCtx != nil && images != nil {
 					if statusBuffer != nil {
 						statusBuffer.Release()
 					}
-					// Создаем текстуру под физическое разрешение экрана Android
+					// Текстура создается под физические пиксели
 					statusBuffer = images.NewImage(sz.WidthPx, sz.HeightPx)
 				}
 			case paint.Event:
@@ -75,33 +75,23 @@ func main() {
 					continue
 				}
 
-				// Очистка экрана (Черный фон)
 				glCtx.ClearColor(0, 0, 0, 1)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
-				// Отрисовка UI-текста статуса через растровый буфер
-				// Для Zero-Collection переиспользуем область RGBA без новых аллокаций в цикле
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 
-				// Выводим полезную нагрузку текстового сигнала
-				// На практике здесь вызывается итератор по цепочке uiTimeline
 				msg := p.Sprintf(textSignal.Payload)
-				
-				// Запись текста напрямую в пиксельный буфер текстуры
-				// Примечание: Для полноценного Zero-Alloc рендеринга шрифтов
-				// здесь должен использоваться фиксированный пул текстурных глифов.
 				drawTextToRGBA(rgba, msg)
 
-				// Загружаем обновленные пиксели статуса в видеопамять (GPU)
 				statusBuffer.Upload()
 				
-				// Выводим текстуру на весь экран Android
+				// Корректная отрисовка с использованием geom.Point и geom.Pt
 				statusBuffer.Draw(
 					sz,
-					image.Point{},
-					image.Point{X: sz.WidthPx, Y: 0},
-					image.Point{X: 0, Y: sz.HeightPx},
+					geom.Point{X: 0, Y: 0},
+					geom.Point{X: sz.WidthPt, Y: 0},
+					geom.Point{X: 0, Y: sz.HeightPt},
 					rgba.Bounds(),
 				)
 
@@ -111,9 +101,6 @@ func main() {
 	})
 }
 
-// Заглушка попиксельного или шрифтового вывода для демонстрации статуса
 func drawTextToRGBA(rgba *image.RGBA, text string) {
-	// Базовая низкоуровневая отрисовка пикселей/шрифта.
-	// В продакшене используется x/image/font или ваш внутренний Zero-Alloc растеризатор текстур.
 	_ = text 
 }
