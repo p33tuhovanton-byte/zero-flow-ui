@@ -83,14 +83,12 @@ jobs:
                   versionCode 1
                   versionName "1.0"
                   
-                  // Архитектуры процессоров настраиваются здесь вместо GOARCH
                   ndk {
                       abiFilters 'armeabi-v7a', 'arm64-v8a'
                   }
               }
           }
 
-          // Исправленный блок конфигурации без ошибочных свойств GOOS/GOARCH
           gobind {
               pkg = "../../example"
           }
@@ -123,15 +121,16 @@ jobs:
           </manifest>
           EOF
 
-      - name: Set up and Run Gradle (Compiles Go and APK together)
+      - name: Set up and Run Gradle (Compiles Debug and Release together)
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 7.5
           build-root-directory: example/android
-          arguments: assembleDebug -Dorg.gradle.environment.ANDROID_NDK_HOME=""
+          arguments: assemble -Dorg.gradle.environment.ANDROID_NDK_HOME=""
 
-      - name: Upload Finished Gradle APK Artifact
+      - name: Upload Finished Gradle APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zero-flow-gobind-plugin-apk
-          path: example/android/app/build/outputs/apk/debug/app-zero-flow-ui.apk
+          name: zero-flow-apks
+          # Загружаем всю папку, где лежат и debug, и release версии
+          path: example/android/app/build/outputs/apk/
