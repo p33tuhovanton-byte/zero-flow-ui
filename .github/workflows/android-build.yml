@@ -70,7 +70,7 @@ jobs:
           export ANDROID_NDK_HOME=""
           gomobile build -androidapi 30 -target=android -o zero-flow-unsigned.apk ./example
 
-      - name: Sign and Align Android APK (Fix Parsing Error)
+            - name: Sign and Align Android APK (Fix Parsing Error)
         run: |
           # 1. Находим актуальные инструменты Android SDK Build Tools на сервере
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
@@ -81,8 +81,9 @@ jobs:
           # 3. Генерируем временное цифровое хранилище ключей (Keystore)
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
-          # 4. Подписываем приложение сигнатурой v2/v3, которую требует Android 11+
-          $BUILD_TOOLS_DIR/apksigner sign --keystore debug.keystore --storepass android --keypass android --out zero-flow.apk zero-flow-aligned.apk
+          # 4. Исправленный синтаксис apksigner для современных SDK (используем --ks)
+          $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out zero-flow.apk zero-flow-aligned.apk
+
 
       - name: Upload Finished APK Artifact
         uses: actions/upload-artifact@v4
