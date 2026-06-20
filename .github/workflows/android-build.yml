@@ -15,6 +15,7 @@ env:
 GO111MODULE: on  
 JAVA\_HOME: /opt/hostedtoolcache/Java\_Temurin-Hotspot\_jdk/17.0.19-10/x64  
 ANDROID\_HOME: /usr/local/lib/android/sdk  
+ANDROID\_SDK\_ROOT: /usr/local/lib/android/sdk  
 ANDROID\_NDK\_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653 
 
 steps:  
@@ -31,33 +32,7 @@ cache: true 
 uses: actions/setup-java@v3  
 with:  
 java-version: '17'  
-distribution: 'temurin'  
-cache: 'gradle' 
-
-\- name: Setup Android NDK and SDK Environment  
-run: |  
-echo "ANDROID\_HOME=
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)𝑒𝑛𝑣.𝐴𝑁𝐷𝑅𝑂𝐼𝐷𝐻𝑂𝑀𝐸
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)"
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)\>\>
-
-GITHUB\_ENV  
-echo "ANDROID\_NDK\_HOME=
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)𝑒𝑛𝑣.𝐴𝑁𝐷𝑅𝑂𝐼𝐷𝑁𝐷𝐾𝐻𝑂𝑀𝐸
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)"
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)
-
-![](data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==)\>\>
-
-GITHUB\_ENV 
+distribution: 'temurin' 
 
 \- name: Initialize Gomobile Toolchain  
 run: |  
@@ -69,16 +44,15 @@ run: |
 go get golang.org/x/mobile@latest  
 go mod tidy 
 
-\- name: Generate Android Resources and Directories  
+\- name: Generate Android Directories inside Example  
 run: |  
-\# Автоматическое создание структуры проекта Gradle, если её нет  
-mkdir -p android/app/libs  
-mkdir -p android/app/src/main/res/values  
-mkdir -p android/gradle/wrapper 
+mkdir -p example/android/app/libs  
+mkdir -p example/android/app/src/main/res/values  
+mkdir -p example/android/gradle/wrapper 
 
-\- name: Generate Root build.gradle  
+\- name: Generate Root build.gradle inside Example  
 run: |  
-cat << 'EOF' > android/build.gradle  
+cat << 'EOF' > example/android/build.gradle  
 buildscript {  
 repositories {  
 google()  
@@ -99,9 +73,13 @@ delete rootProject.buildDir
 }  
 EOF 
 
-\- name: Generate App build.gradle (Target API 30 for Android 11)  
+\- name: Generate Settings Gradle inside Example  
 run: |  
-cat << 'EOF' > android/app/build.gradle  
+echo "include ':app'" > example/android/settings.gradle 
+
+\- name: Generate App build.gradle (Target API 30) inside Example  
+run: |  
+cat << 'EOF' > example/android/app/build.gradle  
 apply plugin: 'com.android.application' 
 
 android {  
@@ -129,9 +107,9 @@ implementation fileTree(dir: 'libs', include: \['*.jar', '*.aar'\])
 }  
 EOF 
 
-\- name: Generate Fullscreen White Theme (themes.xml)  
+\- name: Generate Fullscreen White Theme inside Example  
 run: |  
-cat << 'EOF' > android/app/src/main/res/values/themes.xml  
+cat << 'EOF' > example/android/app/src/main/res/values/themes.xml  
   
   
   
@@ -143,9 +121,9 @@ false
   
 EOF 
 
-\- name: Generate Production AndroidManifest.xml  
+\- name: Generate Production AndroidManifest.xml inside Example  
 run: |  
-cat << 'EOF' > android/app/src/main/src/main/AndroidManifest.xml  
+cat << 'EOF' > example/android/app/src/main/AndroidManifest.xml  
   
  
 
@@ -159,23 +137,36 @@ cat << 'EOF' > android/app/src/main/src/main/AndroidManifest.xml
   
 EOF 
 
-\- name: Setup Gradle Wrapper Environment  
+\- name: Download and Bootstrap Pure Gradle Wrapper  
 run: |  
-cd android  
-gradle wrapper --gradle-version 7.5 
+\# Скачиваем официальные исполняемые файлы сборщика Gradle версии 7.5  
+curl -LO githubusercontent.com  
+mv gradlew example/android/gradlew  
+chmod +x example/android/gradlew 
 
-\- name: Execute Gomobile Bind (Compile Go to Native AAR)  
+\# Генерируем конфигурацию загрузчика  
+cat << 'EOF' > example/android/gradle/wrapper/gradle-wrapper.properties  
+distributionBase=GRADLE\_USER\_HOME  
+distributionPath=wrapper/dists  
+distributionUrl=gradle.org  
+zipStoreBase=GRADLE\_USER\_HOME  
+zipStorePath=wrapper/dists  
+EOF 
+
+\# Скачиваем jar-загрузчик Gradle  
+curl -Lo example/android/gradle/wrapper/gradle-wrapper.jar github.com 
+
+\- name: Execute Gomobile Bind into Example Libs  
 run: |  
-gomobile bind -androidapi 30 -target=android -o ./android/app/libs/zero\_flow.aar ./example 
+gomobile bind -androidapi 30 -target=android -o ./example/android/app/libs/zero\_flow.aar ./example 
 
 \- name: Compile Fullscreen White Android APK via Gradle  
 run: |  
-cd android  
-chmod +x gradlew  
+cd example/android  
 ./gradlew assembleDebug 
 
 \- name: Upload Compiled Production APK Artifact  
 uses: actions/upload-artifact@v3  
 with:  
-name: zero-flow-api30-apps  
-path: android/app/build/outputs/apk/debug/app-debug.apk
+name: zero-flow-api30-app  
+path: example/android/app/build/outputs/apk/debug/app-debug.apk
