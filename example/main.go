@@ -16,94 +16,85 @@ import (
 	"zeroflowui"
 )
 
-// GlyphDecorator оперирует исключительно типом byte
+// Декларативный интерфейс символа, оперирующий исключительно типом byte
 type GlyphDecorator interface {
-	RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool
+	RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool
 }
 
 type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
+func (e EmptyGlyph) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
 	return false 
 }
 
+// Структурный декоратор символа 'W'. Хранит маску 8x8 как 8 независимых байт-констант
 type GlyphW struct {
 	Next GlyphDecorator
 }
-func (g GlyphW) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
+func (g GlyphW) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
 	if charCode == 87 { // ASCII 'W'
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
-		drawRow(rgba, 0x4A, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
-		drawRow(rgba, 0x54, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
-		drawRow(rgba, 0x64, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
+		blitRow(dst, 0x42, x, y + 0)
+		blitRow(dst, 0x42, x, y + 1)
+		blitRow(dst, 0x42, x, y + 2)
+		blitRow(dst, 0x4A, x, y + 3)
+		blitRow(dst, 0x54, x, y + 4)
+		blitRow(dst, 0x64, x, y + 5)
+		blitRow(dst, 0x42, x, y + 6)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
+	return g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
+// Структурный декоратор символа 'O'
 type GlyphO struct {
 	Next GlyphDecorator
 }
-func (g GlyphO) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
+func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
 	if charCode == 79 { // ASCII 'O'
-		drawRow(rgba, 0x3C, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
-		drawRow(rgba, 0x3C, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
+		blitRow(dst, 0x3C, x, y + 0)
+		blitRow(dst, 0x42, x, y + 1)
+		blitRow(dst, 0x42, x, y + 2)
+		blitRow(dst, 0x42, x, y + 3)
+		blitRow(dst, 0x42, x, y + 4)
+		blitRow(dst, 0x42, x, y + 5)
+		blitRow(dst, 0x3C, x, y + 6)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
+	return g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
+// Структурный декоратор символа 'K'
 type GlyphK struct {
 	Next GlyphDecorator
 }
-func (g GlyphK) RenderGlyph(rgba *image.RGBA, charCode byte, xHigh, xLow, yHigh, yLow, scale byte) bool {
+func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) bool {
 	if charCode == 75 { // ASCII 'K'
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (0 * scale), scale)
-		drawRow(rgba, 0x44, xHigh, xLow, yHigh, yLow + (1 * scale), scale)
-		drawRow(rgba, 0x48, xHigh, xLow, yHigh, yLow + (2 * scale), scale)
-		drawRow(rgba, 0x70, xHigh, xLow, yHigh, yLow + (3 * scale), scale)
-		drawRow(rgba, 0x48, xHigh, xLow, yHigh, yLow + (4 * scale), scale)
-		drawRow(rgba, 0x44, xHigh, xLow, yHigh, yLow + (5 * scale), scale)
-		drawRow(rgba, 0x42, xHigh, xLow, yHigh, yLow + (6 * scale), scale)
+		blitRow(dst, 0x42, x, y + 0)
+		blitRow(dst, 0x44, x, y + 1)
+		blitRow(dst, 0x48, x, y + 2)
+		blitRow(dst, 0x70, x, y + 3)
+		blitRow(dst, 0x48, x, y + 4)
+		blitRow(dst, 0x44, x, y + 5)
+		blitRow(dst, 0x42, x, y + 6)
 		return true
 	}
-	return g.Next.RenderGlyph(rgba, charCode, xHigh, xLow, yHigh, yLow, scale)
+	return g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-func drawRow(rgba *image.RGBA, bits byte, xHigh, xLow, yHigh, yLow, scale byte) {
-	if (bits & 0x80) != 0 { drawPixelBlock(rgba, xHigh, xLow + (0 * scale), yHigh, yLow, scale) }
-	if (bits & 0x40) != 0 { drawPixelBlock(rgba, xHigh, xLow + (1 * scale), yHigh, yLow, scale) }
-	if (bits & 0x20) != 0 { drawPixelBlock(rgba, xHigh, xLow + (2 * scale), yHigh, yLow, scale) }
-	if (bits & 0x10) != 0 { drawPixelBlock(rgba, xHigh, xLow + (3 * scale), yHigh, yLow, scale) }
-	if (bits & 0x08) != 0 { drawPixelBlock(rgba, xHigh, xLow + (4 * scale), yHigh, yLow, scale) }
-	if (bits & 0x04) != 0 { drawPixelBlock(rgba, xHigh, xLow + (5 * scale), yHigh, yLow, scale) }
-	if (bits & 0x02) != 0 { drawPixelBlock(rgba, xHigh, xLow + (6 * scale), yHigh, yLow, scale) }
-	if (bits & 0x01) != 0 { drawPixelBlock(rgba, xHigh, xLow + (7 * scale), yHigh, yLow, scale) }
-}
+// Безопасный побайтовый блиттинг строки без ручного вычисления Stride и риска переполнения
+func blitRow(dst draw.Image, bits byte, startX byte, y byte) {
+	// Подготавливаем статический пиксельный квад размером 4x4 для масштабирования текста
+	rect := image.Rect(0, 0, 4, 4)
+	blackSrc := &image.Uniform{color.Black}
 
-func drawPixelBlock(rgba *image.RGBA, xHigh, xLow, yHigh, yLow, scale byte) {
-	var sy byte
-	var sx byte
-	for sy = 0; sy < scale; sy++ {
-		for sx = 0; sx < scale; sx++ {
-			finalX := (int(xHigh) << 8) + int(xLow + sx)
-			finalY := (int(yHigh) << 8) + int(yLow + sy)
-			
-			pixOffset := (finalY * rgba.Stride) + (finalX * 4)
-
-			rgba.Pix[pixOffset+0] = 0   // R
-			rgba.Pix[pixOffset+1] = 0   // G
-			rgba.Pix[pixOffset+2] = 0   // B
-			rgba.Pix[pixOffset+3] = 255 // A
-		}
-	}
+	// Побитовый разбор строки. Вызов draw.Draw выполняется на уровне ассемблера (0 allocs/op)
+	if (bits & 0x80) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+0*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x40) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+1*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x20) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+2*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x10) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+3*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x08) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+4*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x04) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+5*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x02) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+6*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x01) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+7*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
 }
 
 type UIValueState struct {
@@ -158,38 +149,35 @@ func main() {
 				a.Send(paint.Event{})
 			case touch.Event:
 				if x.Type == touch.TypeBegin {
+					// In-place изменение состояния ячеек структуры
 					uiState.Char1 = 79 // 'O'
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
 				}
-							case paint.Event:
+			case paint.Event:
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
 				}
 
-				// ТОЧЕЧНОЕ РАЗДЕЛЕНИЕ ТИПОВ ДЛЯ GL API АНДРОИД
-				// Viewport принимает нативный int, а Scissor требует строго int32.
-				// Преобразование выполняется на уровне регистров CPU (0 allocs/op).
+				// Фиксация вьюпорта
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-				
 				glCtx.Enable(gl.SCISSOR_TEST)
+				
+				// Полная очистка экрана в белый цвет
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				var xHigh byte = 0
-				var xLow1 byte = 40
-				var xLow2 byte = 80
-				var yHigh byte = 0
-				var yLow byte = 120
-				var textScale byte = 4
+				// Декларативный вызов цепочки декораторов по отдельным byte-координатам (0 аллокаций)
+				var startX byte = 10
+				var startY byte = 30
 
-				atlasChain.RenderGlyph(rgba, uiState.Char1, xHigh, xLow1, yHigh, yLow, textScale)
-				atlasChain.RenderGlyph(rgba, uiState.Char2, xHigh, xLow2, yHigh, yLow, textScale)
+				atlasChain.RenderGlyph(rgba, uiState.Char1, startX, startY)
+				atlasChain.RenderGlyph(rgba, uiState.Char2, startX + 10, startY)
 
 				statusBuffer.Upload()
 				statusBuffer.Draw(sz, geom.Point{}, geom.Point{X: sz.WidthPt}, geom.Point{Y: sz.HeightPt}, rgba.Bounds())
