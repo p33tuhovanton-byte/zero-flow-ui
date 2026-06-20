@@ -162,18 +162,17 @@ func main() {
 					uiState.Char2 = 75 // 'K'
 					a.Send(paint.Event{})
 				}
-			case paint.Event:
+						case paint.Event:
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
 				}
 
-				// ИСПРАВЛЕНИЕ: Явное приведение типов int к int32 на границе системного вызова Android API
-				w32 := int32(sz.WidthPx)
-				h32 := int32(sz.HeightPx)
-
-				glCtx.Viewport(0, 0, w32, h32)
-				glCtx.Scissor(0, 0, w32, h32)
+				// ЧИСТЫЙ СКВОЗНОЙ ВЫЗОВ СИСТЕМНЫХ ПАРАМЕТРОВ БЕЗ ПРИВЕДЕНИЯ ТИПОВ
+				// Оба метода в данном API принимают нативный тип int.
+				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+				glCtx.Scissor(0, 0, sz.WidthPx, sz.HeightPx)
+				
 				glCtx.Enable(gl.SCISSOR_TEST)
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
