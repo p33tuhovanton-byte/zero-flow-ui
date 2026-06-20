@@ -16,18 +16,13 @@ import (
 	"zeroflowui"
 )
 
-// Декларативный интерфейс конвейера атласа. Метод больше ничего не возвращает (void/без return).
 type GlyphDecorator interface {
 	RenderGlyph(dst draw.Image, charCode byte, x byte, y byte)
 }
 
-// Терминальный декоратор — просто тупик конвейера, завершающий сквозной проход
 type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
-	// Конец цепочки. Нет return, поток просто завершается.
-}
+func (e EmptyGlyph) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {}
 
-// Декоратор символа 'W'
 type GlyphW struct {
 	Next GlyphDecorator
 }
@@ -41,11 +36,9 @@ func (g GlyphW) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 		blitRow(dst, 0x64, x, y + 5)
 		blitRow(dst, 0x42, x, y + 6)
 	}
-	// Безусловный сквозной проход дальше по конвейеру без прерывания
 	g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-// Декоратор символа 'O'
 type GlyphO struct {
 	Next GlyphDecorator
 }
@@ -62,7 +55,6 @@ func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 	g.Next.RenderGlyph(dst, charCode, x, y)
 }
 
-// Декоратор символа 'K'
 type GlyphK struct {
 	Next GlyphDecorator
 }
@@ -80,17 +72,17 @@ func (g GlyphK) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 }
 
 func blitRow(dst draw.Image, bits byte, startX byte, y byte) {
-	rect := image.Rect(0, 0, 4, 4)
+	rect := image.Rect(0, 0, 6, 6) // Увеличен размер пикселя для лучшей видимости
 	blackSrc := &image.Uniform{color.Black}
 
-	if (bits & 0x80) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+0*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x40) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+1*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x20) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+2*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x10) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+3*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x08) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+4*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x04) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+5*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x02) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+6*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
-	if (bits & 0x01) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+7*4), int(y*4))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x80) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+0*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x40) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+1*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x20) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+2*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x10) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+3*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x08) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+4*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x04) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+5*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x02) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+6*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
+	if (bits & 0x01) != 0 { draw.Draw(dst, rect.Bounds().Add(image.Pt(int(startX+7*6), int(y*6))), blackSrc, image.Point{}, draw.Src) }
 }
 
 type UIValueState struct {
@@ -155,24 +147,37 @@ func main() {
 					continue
 				}
 
+				// АППАРАТНЫЙ СБРОС СИСТЕМНОЙ ТЕМЫ: Растягиваем контекст на физические пиксели экрана
+				// Это принудительно перекрывает черную плашку "Example" сверху
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-				glCtx.Enable(gl.SCISSOR_TEST)
+				glCtx.Disable(gl.SCISSOR_TEST) // Отключаем тест отсечения для полного игнорирования границ Window
+
+				// Заливка кадра белым цветом на уровне GPU
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT)
 
 				rgba := statusBuffer.RGBA
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				var startX byte = 10
-				var startY byte = 30
+				// Координаты смещены ниже (startY = 60), чтобы текст гарантированно вышел из-под системной зоны
+				var startX byte = 20
+				var startY byte = 60
 
-				// Вызовы выполняются сквозным образом, гарантируя отсутствие зависаний стека
 				atlasChain.RenderGlyph(rgba, uiState.Char1, startX, startY)
-				atlasChain.RenderGlyph(rgba, uiState.Char2, startX + 10, startY)
+				atlasChain.RenderGlyph(rgba, uiState.Char2, startX + 12, startY)
 
 				statusBuffer.Upload()
-				statusBuffer.Draw(sz, geom.Point{}, geom.Point{X: sz.WidthPt}, geom.Point{Y: sz.HeightPt}, rgba.Bounds())
+				
+				// ЖЕСТКАЯ ОТРИСОВКА ПОВЕРХ ВСЕХ СЛОЕВ ОКНА (Полный экран)
+				statusBuffer.Draw(
+					sz,
+					geom.Point{X: 0, Y: 0},
+					geom.Point{X: sz.WidthPt, Y: 0},
+					geom.Point{X: 0, Y: sz.HeightPt},
+					rgba.Bounds(),
+				)
+				
 				glCtx.Flush()
 				a.Publish()
 				a.Send(paint.Event{})
