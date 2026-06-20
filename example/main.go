@@ -50,7 +50,7 @@ func (g GlyphO) RenderGlyph(dst draw.Image, charCode byte, x byte, y byte) {
 		blitRow(dst, 0x42, x, y + 3)
 		blitRow(dst, 0x42, x, y + 4)
 		blitRow(dst, 0x42, x, y + 5)
-		<markdown></markdown>blitRow(dst, 0x3C, x, y + 6)
+		blitRow(dst, 0x3C, x, y + 6)
 	}
 	g.Next.RenderGlyph(dst, charCode, x, y)
 }
