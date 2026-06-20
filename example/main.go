@@ -9,17 +9,14 @@ import (
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
-	"golang.org/x/mobile/event/touch" // Пакет для обработки тапов
+	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/exp/gl/glutil"
 	"golang.org/x/mobile/geom"
 	"golang.org/x/mobile/gl"
 	"zeroflowui"
 )
 
-// Фиксированная матрица шрифта 8x8 для Zero-Alloc растеризации.
-// Содержит базовые символы для демонстрации статусов логов (Z, e, r, o, F, l, w, U, I, :, K).
-// 1 - пиксель текста, 0 - фон. Массив статичен и не аллоцирует память.
-var zeroFont8x8 = map[rune][8]byte{
+var zeroFont8x8 = map[rune]byte{
 	'Z': {0x7E, 0x0C, 0x18, 0x30, 0x60, 0x42, 0x7E, 0x00},
 	'e': {0x3C, 0x42, 0x7E, 0x40, 0x40, 0x42, 0x3C, 0x00},
 	'r': {0x5C, 0x62, 0x40, 0x40, 0x40, 0x40, 0xE0, 0x00},
@@ -39,7 +36,6 @@ func main() {
 	uiTimeline := zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-	// Начальный статус
 	textSignal := zeroflowui.TextSignal{
 		Type:    zeroflowui.TextType,
 		Payload: "ZeroFlowUI: Wait...",
@@ -90,40 +86,36 @@ func main() {
 				a.Send(paint.Event{})
 
 			case touch.Event:
-				// ОБРАБОТКА ТАПОВ: Меняем полезную нагрузку сигнала по нажатию на экран
 				if x.Type == touch.TypeBegin {
-					// Имитируем декларативное уведомление от конвейера
 					textSignal.Payload = "ZeroFlowUI: OK"
-					// Прокачиваем событие через вашу библиотеку
 					uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Touched")
 					pipeline.Process(zeroflowui.NewTextFlow(textSignal), uiTimeline)
-					// Принудительно запрашиваем перерисовку экрана
 					a.Send(paint.Event{})
 				}
 
 			case paint.Event:
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
-					continue
+					return
 				}
 
-				// Аппаратно фиксируем область вывода на полный экран
+				// НАДЁЖНАЯ АППАРАТНАЯ ИНИЦИАЛИЗАЦИЯ И ОЧИСТКА ЭКРАНА
 				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-				
-				// Полная очистка холста GPU в чистый белый цвет
+				glCtx.Scissor(0, 0, sz.WidthPx, sz.HeightPx)
+				glCtx.Enable(gl.SCISSOR_TEST)
+
+				// Задаём белый цвет фона
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
-				glCtx.Clear(gl.COLOR_BUFFER_BIT)
+				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 				rgba := statusBuffer.RGBA
-				// Быстрая заливка подложки текстуры белым цветом
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
 
-				// ZERO-ALLOC РЕНДЕРИНГ: Выводим текст из Payload на белый фон черным цветом
-				drawZeroAllocText(rgba, textSignal.Payload, 40, 100, 4) // Масштаб шрифта x4 для читаемости
+				// Выводим текст логов черным цветом
+				drawZeroAllocText(rgba, textSignal.Payload, 40, 120, 4)
 
 				statusBuffer.Upload()
 				
-				// Отрисовка текстуры фреймбуфера
 				statusBuffer.Draw(
 					sz,
 					geom.Point{X: 0, Y: 0},
@@ -132,6 +124,9 @@ func main() {
 					rgba.Bounds(),
 				)
 
+				// Принудительно заставляем GPU сбросить буфер и обновить картинку на экране
+				glCtx.Flush()
+
 				a.Publish()
 				a.Send(paint.Event{})
 			}
@@ -139,37 +134,27 @@ func main() {
 	})
 }
 
-// drawZeroAllocText попиксельно переносит символы напрямую в массив байт фреймбуфера.
-// Не выделяет память (0 allocations/op).
 func drawZeroAllocText(rgba *image.RGBA, text string, startX, startY, scale int) {
 	currentX := startX
-	
 	for _, char := range text {
 		bitmap, exists := zeroFont8x8[char]
 		if !exists {
-			bitmap = zeroFont8x8[' '] // Если символ не найден — рисуем пробел
+			bitmap = zeroFont8x8[' ']
 		}
-
-		// Перенос битовой карты символа в пиксели image.RGBA
 		for row := 0; row < 8; row++ {
 			bits := bitmap[row]
 			for col := 0; col < 8; col++ {
-				// Проверяем, установлен ли бит пикселя текста
 				if (bits & (1 << (7 - uint(col)))) != 0 {
-					// Отрисовываем пиксель с учетом масштабирования (scale)
 					for sy := 0; sy < scale; sy++ {
 						for sx := 0; sx < scale; sx++ {
 							px := currentX + col*scale + sx
 							py := startY + row*scale + sy
-							
-							// Красим пиксель в черный цвет
 							rgba.SetRGBA(px, py, color.RGBA{R: 0, G: 0, B: 0, A: 255})
 						}
 					}
 				}
 			}
 		}
-		// Сдвигаем координату X для следующего символа (8 пикселей + 2 пикселя отступ)
 		currentX += 10 * scale
 	}
 }
