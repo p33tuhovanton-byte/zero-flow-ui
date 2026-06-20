@@ -38,11 +38,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          # Отключаем дефолтный поиск package-lock.json, если его нет в репозитории
-          
+          cache: 'npm'
+          cache-dependency-path: 'package.json' # Исправлен путь к корню
+
       # --- ШАГ 1: СБОРКА И ПРОВЕРКА ТИПОВ TYPESCRIPT ---
       - name: Install Node.js dependencies & Build TS
-        working-directory: ./zero-flow-ui
+        # 🛠️ ИСПРАВЛЕНИЕ: working-directory удален, так как package.json лежит в корне репозитория
         run: |
           npm install
           npx tsc
@@ -62,7 +63,7 @@ jobs:
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Compile Android APK via Gomobile
-        working-directory: ./zero-flow-ui
+        # 🛠️ ИСПРАВЛЕНИЕ: Здесь команда gomobile найдет папку ./example прямо в корне репозитория
         run: |
           gomobile init
           go get golang.org/x/mobile@latest
@@ -74,4 +75,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-android-apk
-          path: ./zero-flow-ui/zero-flow.apk
+          path: zero-flow.apk # Файл сохранится в корне репозитория
