@@ -70,8 +70,8 @@ func main() {
 					statusBuffer = images.NewImage(sz.WidthPx, sz.HeightPx)
 				}
 				a.Send(paint.Event{})
+
 			case paint.Event:
-				// Если Android еще не подготовил контекст, запрашиваем paint повторно
 				if glCtx == nil || images == nil || statusBuffer == nil {
 					a.Send(paint.Event{})
 					continue
@@ -79,17 +79,19 @@ func main() {
 
 				payloadStr := textSignal.Payload
 				isWhiteTheme := strings.Contains(payloadStr, "SET_THEME_WHITE")
-				isFullScreen := strings.Contains(payloadStr, "FULLSCREEN")
 
-				// 1. Жёсткая очистка основного экрана Android через glCtx напрямую
+				// ЖЕСТКАЯ ФИКСАЦИЯ ОБЛАСТИ ВЫВОДА ПОД ЭКРАН АНДРОИД
+				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+
+				// Очистка экрана OpenGL белым цветом
 				if isWhiteTheme {
-					glCtx.ClearColor(1.0, 1.0, 1.0, 1.0) // Белый
+					glCtx.ClearColor(1.0, 1.0, 1.0, 1.0) 
 				} else {
-					glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Черный
+					glCtx.ClearColor(0.0, 0.0, 0.0, 1.0)
 				}
-				glCtx.Clear(gl.COLOR_BUFFER_BIT)
+				// Включаем очистку буфера цвета и глубины
+				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-				// 2. Синхронизируем пиксельную карту фреймбуфера
 				rgba := statusBuffer.RGBA
 				bgColor := color.Black
 				if isWhiteTheme {
@@ -97,23 +99,18 @@ func main() {
 				}
 				draw.Draw(rgba, rgba.Bounds(), &image.Uniform{bgColor}, image.Point{}, draw.Src)
 
-				// Загружаем текстуру в память GPU
 				statusBuffer.Upload()
 				
-				// 3. Вывод на полный экран с принудительным игнорированием системных отступов
-				if isFullScreen {
-					statusBuffer.Draw(
-						sz,
-						geom.Point{X: 0, Y: 0},
-						geom.Point{X: sz.WidthPt, Y: 0},
-						geom.Point{X: 0, Y: sz.HeightPt},
-						rgba.Bounds(),
-					)
-				}
+				// Отрисовка на весь экран
+				statusBuffer.Draw(
+					sz,
+					geom.Point{X: 0, Y: 0},
+					geom.Point{X: sz.WidthPt, Y: 0},
+					geom.Point{X: 0, Y: sz.HeightPt},
+					rgba.Bounds(),
+				)
 
 				a.Publish()
-				
-				// Зацикливаем paint.Event, чтобы Android не успевал подменить холст на дефолтный серый
 				a.Send(paint.Event{})
 			}
 		}
