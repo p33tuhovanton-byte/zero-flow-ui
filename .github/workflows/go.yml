@@ -31,12 +31,11 @@ jobs:
       - name: Validate Core Library Syntax
         run: go build -v .
 
-      # Перенесено внутрь блока steps задачи validate-module
       - name: Build Go application
         working-directory: ./zero-flow-ui
         run: |
           go mod tidy
-          # Сохраняем бинарник в корень всего репозитория (../)
+          # Компилируем main.go и сохраняем бинарник на уровень выше (в корень репозитория)
           go build -o ../my-go-app ./example/main.go
 
       - name: Install Node.js dependencies & Build TS
@@ -80,15 +79,18 @@ jobs:
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Compile Android APK via Gomobile
-        # Если example лежит внутри zero-flow-ui, нужно добавить working-directory: ./zero-flow-ui
+        # 🛠️ ИСПРАВЛЕННЫЙ ПУТЬ: Переносим контекст выполнения внутрь каталога zero-flow-ui
+        working-directory: ./zero-flow-ui
         run: |
           gomobile init
           go get golang.org/x/mobile@latest
           go mod tidy
+          # Теперь относительный путь ./example отработает корректно, а APK сохранится в zero-flow-ui
           GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ./example
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: native-android-apk
-          path: zero-flow.apk
+          # 🛠️ ИСПРАВЛЕННЫЙ ПУТЬ: Указываем артефакту, что файл лежит внутри папки zero-flow-ui
+          path: ./zero-flow-ui/zero-flow.apk
