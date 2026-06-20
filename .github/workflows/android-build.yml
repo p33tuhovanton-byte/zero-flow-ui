@@ -25,13 +25,13 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
           cache: true
 
-      - name: Set up JDK 17
+      - name: Set up JDK 11 (Требуется для старых версий Gradle)
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
 
       - name: Initialize Gomobile Toolchain
@@ -45,7 +45,7 @@ jobs:
         run: |
           mkdir -p example/android/app/src/main/res/values
 
-      - name: Generate Root build.gradle with Gobind Plugin
+      - name: Generate Root build.gradle (Фикс версий под gobind)
         run: |
           echo "include ':app'" > example/android/settings.gradle
           
@@ -57,7 +57,8 @@ jobs:
                   gradlePluginPortal() 
               }
               dependencies { 
-                  classpath 'com.android.tools.build:gradle:7.4.2'
+                  // Понижаем версию AGP до совместимой 4.2.2, где есть bootClasspath
+                  classpath 'com.android.tools.build:gradle:4.2.2'
                   classpath 'org.golang.mobile.bind:org.golang.mobile.bind.gradle.plugin:0.2.13'
               }
           }
@@ -66,14 +67,16 @@ jobs:
           }
           EOF
 
-      - name: Generate App build.gradle (Target API 30 + Correct Gobind)
+      - name: Generate App build.gradle (Target API 30 + Gobind)
         run: |
           cat << 'EOF' > example/android/app/build.gradle
           apply plugin: 'com.android.application'
           apply plugin: 'org.golang.mobile.bind'
 
           android {
+              // Для AGP 4.x используем классический синтаксис свойств
               compileSdkVersion 30
+              buildToolsVersion "30.0.3"
               ndkVersion "25.2.9519653"
               
               defaultConfig {
@@ -121,16 +124,15 @@ jobs:
           </manifest>
           EOF
 
-      - name: Set up and Run Gradle (Compiles Debug and Release together)
+      - name: Set up and Run Совместимый Gradle 6.9
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: 7.5
+          gradle-version: 6.9.4
           build-root-directory: example/android
-          arguments: assemble -Dorg.gradle.environment.ANDROID_NDK_HOME=""
+          arguments: assembleDebug -Dorg.gradle.environment.ANDROID_NDK_HOME=""
 
-      - name: Upload Finished Gradle APK Artifacts
+      - name: Upload Finished Gradle APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zero-flow-apks
-          # Загружаем всю папку, где лежат и debug, и release версии
-          path: example/android/app/build/outputs/apk/
+          name: zero-flow-gobind-plugin-apk
+          path: example/android/app/build/outputs/apk/debug/app-debug.apk
