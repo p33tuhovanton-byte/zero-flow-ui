@@ -53,7 +53,7 @@ jobs:
         # 🛠️ ИСПРАВЛЕНИЕ: working-directory удален, так как package.json лежит в корне репозитория
         run: |
           npm install
-          npx tsc
+          npx build:go
 
       # --- ШАГ 2: ВАЛИДАЦИЯ БАЗОВОГО GO МОДУЛЯ ---
       - name: Verify Core Module Dependencies
