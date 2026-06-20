@@ -7,55 +7,14 @@ on:
     branches: [ main, master ]
 
 jobs:
-  # Шаг 1: Валидация кода и сборка TypeScript-скриптов
-  validate-and-build-ts:
-    name: Build TypeScript and Validate Core
+  build-all-in-one:
+    name: Validate, Build TS and Compile Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Go Environment
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
-      - name: Set up Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: './zero-flow-ui/package-lock.json'
-
-      - name: Verify Core Module Dependencies
-        run: go mod tidy
-
-      - name: Validate Core Library Syntax
-        run: go build -v .
-
-      - name: Install Node.js dependencies & Build TS
-        working-directory: ./zero-flow-ui
-        run: |
-          npm install
-          npx tsc # Компилирует TS в JS (обычно в папку dist/)
-
-      # 🔗 СВЯЗЬ: Сохраняем скомпилированный JavaScript как артефакт
-      - name: Upload Compiled JS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiled-js-assets
-          path: ./zero-flow-ui/dist/ # Укажите вашу папку вывода из tsconfig.json
-
-  # Шаг 2: Сборка APK с внедрением собранного JavaScript
-  build-android-apk:
-    name: Build Native Android APK
-    runs-on: ubuntu-latest
-    # 🔗 СВЯЗЬ: Не запускать сборку APK, пока не завершится сборка TypeScript
-    needs: validate-and-build-ts
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
+      # --- НАСТРОЙКА ОКРУЖЕНИЙ ---
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -75,14 +34,32 @@ jobs:
         with:
           go-version: '1.26'
 
-      # 🔗 СВЯЗЬ: Скачиваем скомпилированный JS-код внутрь этой папки
-      - name: Download JS Artifact for Android Assets
-        uses: actions/download-artifact@v4
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
         with:
-          name: compiled-js-assets
-          # Скачиваем в папку, которую Go/Gomobile использует как ассеты (например, внутри example)
-          path: ./zero-flow-ui/example/assets/ 
+          # 🛠️ ИСПРАВЛЕНИЕ: Переход на Node.js 24, так как Node 20 официально устарел в Actions
+          node-version: '24'
+          cache: 'npm'
+          # 🛠️ ИСПРАВЛЕНИЕ: Если кэш падает, убедитесь, что путь к файлу блокировки указан верно от корня
+          cache-dependency-path: 'zero-flow-ui/package-lock.json'
 
+      # --- ШАГ 1: СБОРКА И ПРОВЕРКА ТИПОВ TYPESCRIPT ---
+      - name: Install Node.js dependencies & Build TS
+        working-directory: ./zero-flow-ui
+        run: |
+          # Если package-lock.json отсутствует в репозитории, используем npm install. 
+          # Если он закоммичен, надежнее использовать npm ci для чистой сборки.
+          npm install
+          npx tsc
+
+      # --- ШАГ 2: ВАЛИДАЦИЯ БАЗОВОГО GO МОДУЛЯ ---
+      - name: Verify Core Module Dependencies
+        run: go mod tidy
+
+      - name: Validate Core Library Syntax
+        run: go build -v .
+
+      # --- ШАГ 3: СБОРКА АНДРОИД APK ЧЕРЕЗ GOMOBILE ---
       - name: Install Gomobile Tools
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
@@ -95,9 +72,9 @@ jobs:
           gomobile init
           go get golang.org/x/mobile@latest
           go mod tidy
-          # Gomobile упакует папку assets/ автоматически внутрь APK
           GO111MODULE=on gomobile build -androidapi 21 -target=android -o zero-flow.apk ./example
 
+      # --- ШАГ 4: СОХРАНЕНИЕ APK СЕРВЕРОМ GITHUB ---
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
