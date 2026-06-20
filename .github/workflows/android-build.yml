@@ -54,11 +54,13 @@ jobs:
               repositories { 
                   google()
                   mavenCentral()
-                  maven { url "https://google.com" }
+                  // ПРАВИЛЬНЫЙ РЕПОЗИТОРИЙ ДЛЯ ПЛАГИНА GOBIND
+                  gradlePluginPortal() 
               }
               dependencies { 
                   classpath 'com.android.tools.build:gradle:7.4.2'
-                  classpath 'org.golang.mobile:bind:0.2.0'
+                  // Используем стабильную версию плагина из портала
+                  classpath 'org.golang.mobile.bind:org.golang.mobile.bind.gradle.plugin:0.2.13'
               }
           }
           allprojects {
