@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go Development Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.21'
           cache: true
 
       - name: Set up JDK 17
@@ -41,39 +41,52 @@ jobs:
           go get golang.org/x/mobile@latest
           go mod tidy
 
-      - name: Cleanup Conflicting Manifest Files
+      - name: Inject Clean Production Android Manifest
         run: |
-          # Полностью удаляем кастомный манифест, чтобы избежать ошибок компилятора ресурсов
-          rm -f example/AndroidManifest.xml
+          # Создаем манифест без extractNativeLibs, чтобы компилятор не падал,
+          # но с жесткой фиксацией системной полноэкранной темы.
+          cat << 'EOF' > example/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://android.com" 
+              package="zeroflowui.example"
+              android:versionCode="1"
+              android:versionName="1.0">
+              
+              <application android:label="ZeroFlowUI" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:allowBackup="false">
+                  <activity android:name="org.golang.app.GoNativeActivity" 
+                      android:exported="true"
+                      android:configChanges="orientation|keyboardHidden|screenSize">
+                      <meta-data android:name="android.app.lib_name" android:value="main" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
 
       - name: Build Genuine Android APK via Gomobile
         run: |
           export ANDROID_NDK_HOME=""
           
-          # Собираем дефолтный APK под arm64. Нам важен скомпилированный libmain.so внутри.
+          # Флаг -androidapi 30 внутри gomobile жестко зашьет в APK targetSdkVersion 30.
+          # Это полностью уберет предупреждение "создано для более ранней версии".
           gomobile build -androidapi 30 -target=android/arm64 -o zero-flow-unsigned.apk ./example
 
       - name: Inject Production Configurations and Sign APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           
-          # Распаковываем APK, чтобы принудительно пересобрать манифест под правила Android 11+
           unzip zero-flow-unsigned.apk -d apk_out
-          
-          # Очищаем старые бинарные подписи gomobile
           rm -rf apk_out/META-INF
-          
-          # Собираем файлы обратно в архив
           cd apk_out && zip -r ../zero-flow-repacked.apk . && cd ..
           
-          # Принудительно выравниваем все нативные .so строго по границе 4 блоков (требование Android 11+)
-          # Это решает проблему "Не удалось обработать пакет" без использования флага extractNativeLibs
+          # Принудительно выравниваем нативные .so по правилам Android 11+ (Page-Aligned)
           $BUILD_TOOLS_DIR/zipalign -f -p 4 zero-flow-repacked.apk zero-flow-aligned.apk
           
-          # Генерируем валидный криптографический ключ подписи
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
-          # Подписываем пакет современными сигнатурами v2 и v3
           $BUILD_TOOLS_DIR/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out zero-flow.apk zero-flow-aligned.apk
 
       - name: Upload Finished APK Artifact
