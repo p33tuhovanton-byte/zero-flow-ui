@@ -1,10 +1,6 @@
 package main
 
 import (
-	"image"
-	"image/color"
-	"image/draw"
-
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
@@ -86,32 +82,26 @@ func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte) {
 // ИНФОРМИРОВАНИЕ ЭЛЕМЕНТОВ ИНТЕРФЕЙСА (ZERO-COLLECTION)
 // ==========================================
 
-// Интерфейс интерактивного UI-элемента
 type UIElementContainer interface {
-	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UITimeline, tx, ty byte, state *UIValueState)
+	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState)
 }
 
 type EndOfUIChain struct{}
-func (e EndOfUIChain) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UITimeline, tx, ty byte, state *UIValueState) {}
+func (e EndOfUIChain) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState) {}
 
-// Декларативный элемент: Зона нотификации статуса (Кнопка 1)
 type UINotificationButton struct {
 	XMin, XMax, YMin, YMax byte
 	Next                   UIElementContainer
 }
-func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UITimeline, tx, ty byte, state *UIValueState) {
-	// Проверка попадания в байтовые координаты элемента
+func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState) {
 	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
-		// Изменяем состояние вывода на "OK"
 		state.NotificationChar1 = 79 // 'O'
 		state.NotificationChar2 = 75 // 'K'
 
-		// Передаем информирование о действии через API библиотеки zeroflowui
 		textSignal := zeroflowui.TextSignal{Type: zeroflowui.TextType, Payload: ""}
 		*timeline = zeroflowui.LogUIEvent(*timeline, false, zeroflowui.EventLifecycle, "NotificationButton", "ClickProcessed")
 		pipe.Process(zeroflowui.NewTextFlow(textSignal), *timeline)
 	}
-	// Безусловный сквозной fall-through проход дальше по цепочке интерфейса (без return)
 	b.Next.DispatchTouch(pipe, timeline, tx, ty, state)
 }
 
@@ -141,7 +131,6 @@ func main() {
 		Next: zeroflowui.TerminalProcessor{},
 	}
 
-	// Инициализация цепочки интерфейса: элемент реагирует в диапазоне координат X(0-100), Y(0-100)
 	uiInterfaceChain := UINotificationButton{
 		XMin: 0, XMax: 100, YMin: 0, YMax: 100,
 		Next: EndOfUIChain{},
@@ -176,11 +165,10 @@ func main() {
 
 			if ev, ok := e.(touch.Event); ok {
 				if ev.Type == touch.TypeBegin {
-					// Преобразуем координаты тапа смартфона в формат byte
-					touchX := byte(ev.X >> 2)
-					touchY := byte(ev.Y >> 2)
+					// Исправлено: математическое масштабирование float32 к byte вместо запрещенного битового сдвига
+					touchX := byte(ev.X / 4.0)
+					touchY := byte(ev.Y / 4.0)
 
-					// Прогоняем сигнал через декларативную цепочку информирования элементов интерфейса
 					uiInterfaceChain.DispatchTouch(&pipeline, &uiTimeline, touchX, touchY, uiState)
 					a.Send(paint.Event{})
 				}
@@ -199,7 +187,6 @@ func main() {
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-				// Выводим символы на холст (координаты Y=20 подняты чуть выше нижней границы)
 				var startX byte = 10
 				var startY byte = 20
 				var textScale byte = 2
