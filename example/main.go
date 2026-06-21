@@ -286,9 +286,8 @@ glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
      glCtx.Disable(gl.SCISSOR_TEST)
      charStream := zeroflowui.MakeStream(textSignal.Payload)
      var charStr string
-     var nextStream 
-     zeroflowui.StringIteratorvar 
-     isEnd bool
+     var nextStream zeroflowui.StringIterator
+     var isEnd bool
      // ИЗВЛЕЧЕНИЕ СИМВОЛОВ БЕЗ МАССИВОВ И СЛАЙСОВ ЧЕРЕЗ UNSAFE УКАЗАТЕЛИ ПАМЯТИ
      charStr, nextStream, isEnd = charStream()
      if !isEnd && charStr != "" {
