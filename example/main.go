@@ -288,7 +288,8 @@ glCtx.Disable(gl.SCISSOR_TEST)
 charStream := zeroflowui.MakeStream(textSignal.Payload)
 var charStr string
 var nextStream zeroflowui.StringIteratorvar 
-isEnd boolcharStr, nextStream, isEnd = charStream()
+isEnd bool
+charStr, nextStream, isEnd = charStream()
 if !isEnd && charStr != "" {
    strPtr := unsafe.Pointer(&charStr)
    dataPtr := *(*unsafe.Pointer)(strPtr)
