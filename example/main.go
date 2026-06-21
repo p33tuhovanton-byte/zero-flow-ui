@@ -138,7 +138,7 @@ type StructuralAtlas struct {
 	Chain GlyphDecorator
 }
 
-func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowui.UIEventFlow, edgeX byte, currentY byte, scrH byte) {
+func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowui.UIEventFlow, edgeX byte, currentLineIndex byte, scrH byte) {
 	if flow == nil {
 		return
 	}
@@ -152,23 +152,27 @@ func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowu
 	var bByte byte = 0
 
 	if descriptor.EventType == zeroflowui.EventInteraction {
-		gByte = 1
+		gByte = 1 
 	}
 
 	var smallScale byte = 1
- calculatedYOffset := 15 + (currentLineIndex * 8)
- realY := scrH - calculatedYOffset
-	realY := scrH - currentY
+	
+	// >>> ВОТ ЗДЕСЬ ИСПРАВЛЕНА ОШИБКА НАЛОЖЕНИЯ СИМВОЛОВ <<<
+	calculatedYOffset := 15 + (currentLineIndex * 8)
+	realY := scrH - calculatedYOffset
 
 	if descriptor.EventType == zeroflowui.EventInteraction {
-		sa.Chain.RenderGlyph(glCtx, 73, edgeX, realY, smallScale, rByte, gByte, bByte)
-		sa.Chain.RenderGlyph(glCtx, 110, edgeX+4, realY, smallScale, rByte, gByte, bByte)
+		sa.Chain.RenderGlyph(glCtx, 73, edgeX, realY, smallScale, rByte, gByte, bByte)   // 'I'
+		sa.Chain.RenderGlyph(glCtx, 110, edgeX+4, realY, smallScale, rByte, gByte, bByte) // 'n'
 	} else {
-		sa.Chain.RenderGlyph(glCtx, 76, edgeX, realY, smallScale, rByte, gByte, bByte)
-		sa.Chain.RenderGlyph(glCtx, 121, edgeX+4, realY, smallScale, rByte, gByte, bByte)
+		sa.Chain.RenderGlyph(glCtx, 76, edgeX, realY, smallScale, rByte, gByte, bByte)   // 'L'
+		sa.Chain.RenderGlyph(glCtx, 121, edgeX+4, realY, smallScale, rByte, gByte, bByte) // 'y'
 	}
-	sa.InterpretUILoopScreen(glCtx, nextFlow, edgeX, currentY+10, scrH)
+	
+	// Спускаемся на следующую строчку (+1 индекс строки)
+	sa.InterpretUILoopScreen(glCtx, nextFlow, edgeX, currentLineIndex+1, scrH)
 }
+
 
 type UIElementContainer interface {
 	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, signal *zeroflowui.TextSignal)
