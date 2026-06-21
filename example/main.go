@@ -10,134 +10,114 @@ import (
 	"zeroflowui"
 )
 
-// Декларативный интерфейс сквозного прохода атласа символов
-type GlyphDecorator interface {
-	RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte)
+// Структура 1: Инкапсулирует логику побитовой отрисовки строки символа
+type HardwareBlitter struct{}
+
+// Метод 1: Побитовый разбор без массивов и коллекций
+func (hb HardwareBlitter) BlitRow(glCtx gl.Context, bits byte, x byte, y byte, scale byte) {
+	if (bits & 0x80) != 0 { hb.DrawPixel(glCtx, x+(0*scale), y, scale) }
+	if (bits & 0x40) != 0 { hb.DrawPixel(glCtx, x+(1*scale), y, scale) }
+	if (bits & 0x20) != 0 { hb.DrawPixel(glCtx, x+(2*scale), y, scale) }
+	if (bits & 0x10) != 0 { hb.DrawPixel(glCtx, x+(3*scale), y, scale) }
+	if (bits & 0x08) != 0 { hb.DrawPixel(glCtx, x+(4*scale), y, scale) }
+	if (bits & 0x04) != 0 { drawPixelDummy(glCtx, x+(5*scale), y, scale) } // Оптимизация под размер шрифта
+	if (bits & 0x02) != 0 { hb.DrawPixel(glCtx, x+(6*scale), y, scale) }
+	if (bits & 0x01) != 0 { hb.DrawPixel(glCtx, x+(7*scale), y, scale) }
 }
 
-type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {}
-
-type GlyphW struct{ Next GlyphDecorator }
-func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 87 { // 'W'
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x4A, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x54, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x64, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
+// Аппаратная заливка пикселя через Scissor Box
+func (hb HardwareBlitter) DrawPixel(glCtx gl.Context, x byte, y byte, scale byte) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*4, int32(scale)*4)
+	glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Черный цвет букв
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-type GlyphO struct{ Next GlyphDecorator }
-func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 79 { // 'O'
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-type GlyphK struct{ Next GlyphDecorator }
-func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 75 { // 'K'
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x44, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x48, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x70, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x48, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x44, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-// Добавляем новые глифы для вывода типа события: 'I', 'n', 'L', 'y'
-type GlyphI struct{ Next GlyphDecorator }
-func (g GlyphI) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 73 { // 'I'
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x18, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x18, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x18, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x18, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x18, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-type GlyphN struct{ Next GlyphDecorator }
-func (g GlyphN) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 110 { // 'n'
-		blitRow(glCtx, 0x00, x, y+(0*scale), scale)
-		blitRow(glCtx, 0xDC, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x62, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-type GlyphL struct{ Next GlyphDecorator }
-func (g GlyphL) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 76 { // 'L'
-		blitRow(glCtx, 0x40, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x40, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x40, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x40, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x40, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x40, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x7E, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-type GlyphY struct{ Next GlyphDecorator }
-func (g GlyphY) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 121 { // 'y'
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
-		blitRow(glCtx, 0x3C, x, y+(3*scale), scale)
-		blitRow(glCtx, 0x02, x, y+(4*scale), scale)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
-}
-
-func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte) {
-	if (bits & 0x80) != 0 { drawHWBlock(glCtx, startX+(0*scale), y, scale) }
-	if (bits & 0x40) != 0 { drawHWBlock(glCtx, startX+(1*scale), y, scale) }
-	if (bits & 0x20) != 0 { drawHWBlock(glCtx, startX+(2*scale), y, scale) }
-	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale) }
-	if (bits & 0x08) != 0 { drawHWBlock(glCtx, startX+(4*scale), y, scale) }
-	if (bits & 0x04) != 0 { drawHWBlock(glCtx, startX+(5*scale), y, scale) }
-	if (bits & 0x02) != 0 { drawHWBlock(glCtx, startX+(6*scale), y, scale) }
-	if (bits & 0x01) != 0 { drawHWBlock(glCtx, startX+(7*scale), y, scale) }
-}
-
-func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte) {
+func drawPixelDummy(glCtx gl.Context, x byte, y byte, scale byte) {
 	glCtx.Enable(gl.SCISSOR_TEST)
 	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*4, int32(scale)*4)
 	glCtx.ClearColor(0.0, 0.0, 0.0, 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-// ==========================================
-// ИНФОРМИРОВАНИЕ ЭЛЕМЕНТОВ ИНТЕРФЕЙСА (ZERO-COLLECTION)
-// ==========================================
+// Структура 2: Монолитный атлас, группирующий все символы системы
+type StructuralAtlas struct {
+	Blitter HardwareBlitter
+}
+
+// Метод 2: Сквозной каскадный проход без циклов, map и ключевого слова return
+func (sa StructuralAtlas) FlowLine(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
+	// --- Каскад символа 'W' (ASCII 87) ---
+	if charCode == 87 {
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x4A, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x54, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x64, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'O' (ASCII 79) ---
+	if charCode == 79 {
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'K' (ASCII 75) ---
+	if charCode == 75 {
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x44, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x48, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x70, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x48, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x44, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'I' (ASCII 73) ---
+	if charCode == 73 {
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x18, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x18, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x18, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x18, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x18, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'n' (ASCII 110) ---
+	if charCode == 110 {
+		sa.Blitter.BlitRow(glCtx, 0x00, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0xDC, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x62, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'L' (ASCII 76) ---
+	if charCode == 76 {
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x40, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x7E, x, y+(6*scale), scale)
+	}
+	// --- Каскад символа 'y' (ASCII 121) ---
+	if charCode == 121 {
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(0*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(1*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(2*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(3*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x02, x, y+(4*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x42, x, y+(5*scale), scale)
+		sa.Blitter.BlitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+	}
+}
 
 type UIElementContainer interface {
 	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, state *UIValueState)
@@ -152,13 +132,9 @@ type UINotificationButton struct {
 }
 func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, state *UIValueState) {
 	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
-		// 1. Генерируем и дописываем событие взаимодействия типа EventInteraction (true)
 		*timeline = zeroflowui.LogUIEvent(*timeline, false, zeroflowui.EventInteraction, "NotificationButton", "ClickProcessed")
-
-		// 2. Распаковываем дескриптор из функционального замыкания без коллекций и return
 		descriptor, _, _ := (*timeline)()
 
-		// 3. Анализируем поле EventType типа UIEvent (bool) и выводим характеристику на экран
 		if descriptor.EventType == zeroflowui.EventInteraction {
 			state.NotificationChar1 = 73  // 'I'
 			state.NotificationChar2 = 110 // 'n'
@@ -182,27 +158,14 @@ func main() {
 	var uiTimeline zeroflowui.UIEventFlow = zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
-	// По умолчанию выводим 'L' и 'y', так как первое событие — системный EventLifecycle
 	uiState := &UIValueState{
 		NotificationChar1: 76,  // 'L'
 		NotificationChar2: 121, // 'y'
 	}
 
-	// Собираем расширенный атлас символов, включая новые буквы
-	atlasChain := GlyphW{
-		Next: GlyphO{
-			Next: GlyphK{
-				Next: GlyphI{
-					Next: GlyphN{
-						Next: GlyphL{
-							Next: GlyphY{
-								Next: EmptyGlyph{},
-							},
-						},
-					},
-				},
-			},
-		},
+	// Инициализируем наш скомпонованный атлас структур
+	sysAtlas := StructuralAtlas{
+		Blitter: HardwareBlitter{},
 	}
 
 	pipeline := zeroflowui.SystemPipelineDecorator{
@@ -268,10 +231,10 @@ func main() {
 				var startY byte = 20
 				var textScale byte = 2
 
-				atlasChain.RenderGlyph(glCtx, uiState.NotificationChar1, startX, startY, textScale)
-				atlasChain.RenderGlyph(glCtx, uiState.NotificationChar2, startX+20, startY, textScale)
-
+				// Сборка вывода через единый метод FlowLine без создания аллокаций
 				glCtx.Disable(gl.SCISSOR_TEST)
+				sysAtlas.FlowLine(glCtx, uiState.NotificationChar1, startX, startY, textScale)
+				sysAtlas.FlowLine(glCtx, uiState.NotificationChar2, startX+20, startY, textScale)
 
 				glCtx.Flush()
 				a.Publish()
