@@ -283,11 +283,33 @@ glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				var startX byte = 10
      var startY byte = 20
      var textScale byte = 2
-
-glCtx.Disable(gl.SCISSOR_TEST)charStream := zeroflowui.MakeStream(textSignal.Payload)var charStr stringvar nextStream zeroflowui.StringIteratorvar isEnd bool
-
-charStr, nextStream, isEnd = charStream()if !isEnd && charStr != "" {sysAtlas.Chain.RenderGlyph(glCtx, charStr[0], startX, startY, textScale, 0)charStr, nextStream, isEnd = nextStream()if !isEnd && charStr != "" {sysAtlas.Chain.RenderGlyph(glCtx, charStr[0], startX+20, startY, textScale, 0)}}
-var topRightX byte = byte(sz.WidthPx>>2) - 15var topRightY byte = byte(sz.HeightPx>>2) - 15
-sysAtlas.InterpretUILoopScreen(glCtx, uiTimeline, topRightX, topRightY)
-glCtx.Disable(gl.SCISSOR_TEST)glCtx.Flush()a.Publish()a.Send(paint.Event{})}}})}
-
+     glCtx.Disable(gl.SCISSOR_TEST)
+     charStream := zeroflowui.MakeStream(textSignal.Payload)
+     var charStr string
+     var nextStream 
+     zeroflowui.StringIteratorvar 
+     isEnd bool
+     // ИЗВЛЕЧЕНИЕ СИМВОЛОВ БЕЗ МАССИВОВ И СЛАЙСОВ ЧЕРЕЗ UNSAFE УКАЗАТЕЛИ ПАМЯТИ
+     charStr, nextStream, isEnd = charStream()
+     if !isEnd && charStr != "" {
+     // Извлекаем адрес первого байта строки напрямую из runtime-дескриптора Go
+     // В Go строка — это структура 
+{ptr unsafe.Pointer, len int}. 
+     //Читаем ptr.
+     var rawByte1 byte = *(byte((*unsafe.Pointer(unsafe.Pointer(&charStr)))
+     sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0)
+     charStr, nextStream, isEnd = nextStream()
+     if !isEnd && charStr != "" {
+         var rawByte2 byte = *(byte((*unsafe.Pointer(unsafe.Pointer(&charStr)))
+        sysAtlas.Chain.RenderGlyph(glCtx, rawByte2, startX+20, startY, textScale, 0)
+    }
+}
+     var topRightX byte = byte(sz.WidthPx>>2) - 15
+     var topRightY byte = byte(sz.HeightPx>>2) - 15
+    sysAtlas.InterpretUILoopScreen(glCtx, uiTimeline, topRightX, topRightY)
+glCtx.Disable(gl.SCISSOR_TEST)
+glCtx.Flush()a.Publish()a.Send(paint.Event{})
+}
+}
+})
+}
