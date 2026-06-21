@@ -156,6 +156,8 @@ func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowu
 	}
 
 	var smallScale byte = 1
+ calculatedYOffset := 15 + (currentLineIndex * 8)
+ realY := scrH - calculatedYOffset
 	realY := scrH - currentY
 
 	if descriptor.EventType == zeroflowui.EventInteraction {
