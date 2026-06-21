@@ -276,20 +276,22 @@ func main() {
 					a.Send(paint.Event{})
 					continue
 				}
-glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-glCtx.Enable(gl.SCISSOR_TEST)
-glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
-glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-var startX byte = 10
-var startY byte = 20
-var textScale byte = 2
-glCtx.Disable(gl.SCISSOR_TEST)
-charStream := zeroflowui.MakeStream(textSignal.Payload)
-var charStr string
-var nextStream
-zeroflowui.StringIteratorvar 
-isEnd bool
+     glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
+				
+				glCtx.Enable(gl.SCISSOR_TEST)
+				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
+				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+				var startX byte = 10
+				var startY byte = 20
+				var textScale byte = 2
+
+				glCtx.Disable(gl.SCISSOR_TEST)
+				charStream := zeroflowui.MakeStream(textSignal.Payload)
+				var charStr string
+				var nextStream zeroflowui.StringIterator
+				var isEnd bool
 charStr, nextStream, isEnd = charStream()
 
 if !isEnd && charStr != "" {
