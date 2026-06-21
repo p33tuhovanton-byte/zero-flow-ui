@@ -82,23 +82,26 @@ func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte) {
 // ИНФОРМИРОВАНИЕ ЭЛЕМЕНТОВ ИНТЕРФЕЙСА (ZERO-COLLECTION)
 // ==========================================
 
+// Исправлено: Для таймлайна используется тип интерфейса `any` (interface{}), убирая ошибку компиляции
 type UIElementContainer interface {
-	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState)
+	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *any, tx, ty byte, state *UIValueState)
 }
 
 type EndOfUIChain struct{}
-func (e EndOfUIChain) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState) {}
+func (e EndOfUIChain) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *any, tx, ty byte, state *UIValueState) {}
 
 type UINotificationButton struct {
 	XMin, XMax, YMin, YMax byte
 	Next                   UIElementContainer
 }
-func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UI, tx, ty byte, state *UIValueState) {
+func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *any, tx, ty byte, state *UIValueState) {
 	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
 		state.NotificationChar1 = 79 // 'O'
 		state.NotificationChar2 = 75 // 'K'
 
 		textSignal := zeroflowui.TextSignal{Type: zeroflowui.TextType, Payload: ""}
+		
+		// Переприсваиваем значение без явного указания типа внутренней структуры библиотеки
 		*timeline = zeroflowui.LogUIEvent(*timeline, false, zeroflowui.EventLifecycle, "NotificationButton", "ClickProcessed")
 		pipe.Process(zeroflowui.NewTextFlow(textSignal), *timeline)
 	}
@@ -111,7 +114,8 @@ type UIValueState struct {
 }
 
 func main() {
-	uiTimeline := zeroflowui.EndOfUI()
+	// Обертка таймлайна в тип any для абстракции на уровне компилятора
+	var uiTimeline any = zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
 	uiState := &UIValueState{
@@ -165,7 +169,6 @@ func main() {
 
 			if ev, ok := e.(touch.Event); ok {
 				if ev.Type == touch.TypeBegin {
-					// Исправлено: математическое масштабирование float32 к byte вместо запрещенного битового сдвига
 					touchX := byte(ev.X / 4.0)
 					touchY := byte(ev.Y / 4.0)
 
