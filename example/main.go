@@ -41,7 +41,7 @@ func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, sca
 		blitRow(glCtx, 0x42, x, y+(3*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(4*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
-		<markdown></markdown>blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
 	}
 	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
 }
