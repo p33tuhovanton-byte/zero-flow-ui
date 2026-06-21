@@ -148,11 +148,10 @@ func main() {
 					continue
 				}
 
-				w32 := int32(sz.WidthPx)
-				h32 := int32(sz.HeightPx)
-
-				glCtx.Viewport(0, 0, w32, h32)
-				glCtx.Scissor(0, 0, w32, h32)
+				// ИСПРАВЛЕННЫЙ ВЫЗОВ: Прямое разделение системных типов Go Mobile API
+				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
+				
 				glCtx.Enable(gl.SCISSOR_TEST)
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
