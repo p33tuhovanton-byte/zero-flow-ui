@@ -1,6 +1,8 @@
 package main
 
 import (
+  "unsafe"
+
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
