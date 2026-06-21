@@ -10,7 +10,7 @@ import (
 	"zeroflowui"
 )
 
-// Декларативный интерфейс сквозного прохода атласа (без return и без scrH)
+// Декларативный интерфейс сквозного прохода атласа (без return)
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte)
 }
@@ -59,7 +59,7 @@ func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, sca
 		blitRow(glCtx, 0x44, x, y + (1 * scale), scale)
 		blitRow(glCtx, 0x48, x, y + (2 * scale), scale)
 		blitRow(glCtx, 0x70, x, y + (3 * scale), scale)
-		<markdown></markdown>blitRow(glCtx, 0x48, x, y + (4 * scale), scale)
+		blitRow(glCtx, 0x48, x, y + (4 * scale), scale)
 		blitRow(glCtx, 0x44, x, y + (5 * scale), scale)
 		blitRow(glCtx, 0x42, x, y + (6 * scale), scale)
 	}
@@ -77,13 +77,10 @@ func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte) {
 	if (bits & 0x01) != 0 { drawHWBlock(glCtx, startX + (7 * scale), y, scale) }
 }
 
-// Прямая отрисовка пикселя через верхнюю систему координат (без инверсии)
 func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte) {
 	glCtx.Enable(gl.SCISSOR_TEST)
-	
-	// Отрисовка идет от верхнего левого угла (0,0) вниз
 	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*4, int32(scale)*4)
-	glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) // Черный цвет пикселя буквы
+	glCtx.ClearColor(0.0, 0.0, 0.0, 1.0) 
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
 
@@ -154,23 +151,19 @@ func main() {
 				w32 := int32(sz.WidthPx)
 				h32 := int32(sz.HeightPx)
 
-				// Принудительно очищаем 100% вьюпорта экрана белым цветом
 				glCtx.Viewport(0, 0, w32, h32)
 				glCtx.Scissor(0, 0, w32, h32)
 				glCtx.Enable(gl.SCISSOR_TEST)
 				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
 				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-				// Координаты (X, Y) и масштаб заданы в рамках 8-битного byte
 				var startX byte = 10
 				var startY byte = 20
 				var textScale byte = 2
 
-				// Сквозной выкат рендеринга букв
 				atlasChain.RenderGlyph(glCtx, uiState.NotificationChar1, startX, startY, textScale)
 				atlasChain.RenderGlyph(glCtx, uiState.NotificationChar2, startX + 20, startY, textScale)
 
-				// Отключаем локальные scissor-боксы, возвращая управление главному экрану
 				glCtx.Disable(gl.SCISSOR_TEST)
 
 				glCtx.Flush()
