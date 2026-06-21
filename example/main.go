@@ -285,7 +285,8 @@ var startX byte = 10
 var startY byte = 20
 var textScale byte = 2
 glCtx.Disable(gl.SCISSOR_TEST)
-charStream := zeroflowui.MakeStream(textSignal.Payload)var charStr string
+charStream := zeroflowui.MakeStream(textSignal.Payload)
+var charStr string
 var nextStream zeroflowui.StringIteratorvar 
 isEnd boolcharStr, nextStream, isEnd = charStream()
 if !isEnd && charStr != "" {
