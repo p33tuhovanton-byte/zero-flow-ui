@@ -20,7 +20,7 @@ func (e EmptyGlyph) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte,
 
 type GlyphW struct{ Next GlyphDecorator }
 func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 87 {
+	if charCode == 87 { // 'W'
 		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
@@ -34,21 +34,21 @@ func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, sca
 
 type GlyphO struct{ Next GlyphDecorator }
 func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 79 {
+	if charCode == 79 { // 'O'
 		blitRow(glCtx, 0x3C, x, y+(0*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(3*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(4*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+		<markdown></markdown>blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
 	}
 	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
 }
 
 type GlyphK struct{ Next GlyphDecorator }
 func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
-	if charCode == 75 {
+	if charCode == 75 { // 'K'
 		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
 		blitRow(glCtx, 0x44, x, y+(1*scale), scale)
 		blitRow(glCtx, 0x48, x, y+(2*scale), scale)
@@ -56,6 +56,63 @@ func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, sca
 		blitRow(glCtx, 0x48, x, y+(4*scale), scale)
 		blitRow(glCtx, 0x44, x, y+(5*scale), scale)
 		blitRow(glCtx, 0x42, x, y+(6*scale), scale)
+	}
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
+}
+
+// Добавляем новые глифы для вывода типа события: 'I', 'n', 'L', 'y'
+type GlyphI struct{ Next GlyphDecorator }
+func (g GlyphI) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
+	if charCode == 73 { // 'I'
+		blitRow(glCtx, 0x3C, x, y+(0*scale), scale)
+		blitRow(glCtx, 0x18, x, y+(1*scale), scale)
+		blitRow(glCtx, 0x18, x, y+(2*scale), scale)
+		blitRow(glCtx, 0x18, x, y+(3*scale), scale)
+		blitRow(glCtx, 0x18, x, y+(4*scale), scale)
+		blitRow(glCtx, 0x18, x, y+(5*scale), scale)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
+	}
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
+}
+
+type GlyphN struct{ Next GlyphDecorator }
+func (g GlyphN) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
+	if charCode == 110 { // 'n'
+		blitRow(glCtx, 0x00, x, y+(0*scale), scale)
+		blitRow(glCtx, 0xDC, x, y+(1*scale), scale)
+		blitRow(glCtx, 0x62, x, y+(2*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(3*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(4*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(6*scale), scale)
+	}
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
+}
+
+type GlyphL struct{ Next GlyphDecorator }
+func (g GlyphL) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
+	if charCode == 76 { // 'L'
+		blitRow(glCtx, 0x40, x, y+(0*scale), scale)
+		blitRow(glCtx, 0x40, x, y+(1*scale), scale)
+		blitRow(glCtx, 0x40, x, y+(2*scale), scale)
+		blitRow(glCtx, 0x40, x, y+(3*scale), scale)
+		blitRow(glCtx, 0x40, x, y+(4*scale), scale)
+		blitRow(glCtx, 0x40, x, y+(5*scale), scale)
+		blitRow(glCtx, 0x7E, x, y+(6*scale), scale)
+	}
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
+}
+
+type GlyphY struct{ Next GlyphDecorator }
+func (g GlyphY) RenderGlyph(glCtx gl.Context, charCode byte, x byte, y byte, scale byte) {
+	if charCode == 121 { // 'y'
+		blitRow(glCtx, 0x42, x, y+(0*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(1*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(2*scale), scale)
+		blitRow(glCtx, 0x3C, x, y+(3*scale), scale)
+		blitRow(glCtx, 0x02, x, y+(4*scale), scale)
+		blitRow(glCtx, 0x42, x, y+(5*scale), scale)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale)
 	}
 	g.Next.RenderGlyph(glCtx, charCode, x, y, scale)
 }
@@ -82,7 +139,6 @@ func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte) {
 // ИНФОРМИРОВАНИЕ ЭЛЕМЕНТОВ ИНТЕРФЕЙСА (ZERO-COLLECTION)
 // ==========================================
 
-// Исправлено: Используем точный функциональный тип zeroflowui.UIEventFlow вместо абстрактного any
 type UIElementContainer interface {
 	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, state *UIValueState)
 }
@@ -96,13 +152,22 @@ type UINotificationButton struct {
 }
 func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, state *UIValueState) {
 	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
-		state.NotificationChar1 = 79 // 'O'
-		state.NotificationChar2 = 75 // 'K'
+		// 1. Генерируем и дописываем событие взаимодействия типа EventInteraction (true)
+		*timeline = zeroflowui.LogUIEvent(*timeline, false, zeroflowui.EventInteraction, "NotificationButton", "ClickProcessed")
+
+		// 2. Распаковываем дескриптор из функционального замыкания без коллекций и return
+		descriptor, _, _ := (*timeline)()
+
+		// 3. Анализируем поле EventType типа UIEvent (bool) и выводим характеристику на экран
+		if descriptor.EventType == zeroflowui.EventInteraction {
+			state.NotificationChar1 = 73  // 'I'
+			state.NotificationChar2 = 110 // 'n'
+		} else {
+			state.NotificationChar1 = 76  // 'L'
+			state.NotificationChar2 = 121 // 'y'
+		}
 
 		textSignal := zeroflowui.TextSignal{Type: zeroflowui.TextType, Payload: ""}
-		
-		// Переприсваиваем функциональный поток сквозным образом
-		*timeline = zeroflowui.LogUIEvent(*timeline, false, zeroflowui.EventLifecycle, "NotificationButton", "ClickProcessed")
 		pipe.Process(zeroflowui.NewTextFlow(textSignal), *timeline)
 	}
 	b.Next.DispatchTouch(pipe, timeline, tx, ty, state)
@@ -114,19 +179,28 @@ type UIValueState struct {
 }
 
 func main() {
-	// Фиксируем оригинальный функциональный тип потока логов
 	var uiTimeline zeroflowui.UIEventFlow = zeroflowui.EndOfUI()
 	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
+	// По умолчанию выводим 'L' и 'y', так как первое событие — системный EventLifecycle
 	uiState := &UIValueState{
-		NotificationChar1: 87, // 'W'
-		NotificationChar2: 87, // 'W'
+		NotificationChar1: 76,  // 'L'
+		NotificationChar2: 121, // 'y'
 	}
 
+	// Собираем расширенный атлас символов, включая новые буквы
 	atlasChain := GlyphW{
 		Next: GlyphO{
 			Next: GlyphK{
-				Next: EmptyGlyph{},
+				Next: GlyphI{
+					Next: GlyphN{
+						Next: GlyphL{
+							Next: GlyphY{
+								Next: EmptyGlyph{},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
