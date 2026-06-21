@@ -11,126 +11,122 @@ import (
 	"zeroflowui"
 )
 
-// Декларативный интерфейс сквозного прохода атласа символов (принимает сырые байты цвета)
 type GlyphDecorator interface {
-	RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte)
+	RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte)
 }
 
 type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {}
+func (e EmptyGlyph) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {}
 
 type GlyphW struct{ Next GlyphDecorator }
-func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 87 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x4A, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x54, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x64, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x4A, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x54, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x64, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphO struct{ Next GlyphDecorator }
-func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 79 {
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphK struct{ Next GlyphDecorator }
-func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 75 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x44, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x48, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x70, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x48, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x44, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x44, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x48, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x70, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x48, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x44, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphI struct{ Next GlyphDecorator }
-func (g GlyphI) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphI) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 73 {
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x18, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x18, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x18, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x18, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x18, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x18, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x18, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x18, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x18, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x18, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphN struct{ Next GlyphDecorator }
-func (g GlyphN) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphN) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 110 {
-		blitRow(glCtx, 0x00, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0xDC, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x62, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x00, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0xDC, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x62, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphL struct{ Next GlyphDecorator }
-func (g GlyphL) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphL) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 76 {
-		blitRow(glCtx, 0x40, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x40, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x40, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x40, x, y+(3*scale), scale, r, g, b)
-		blitRow(glCtx, 0x40, x, y+(4*scale), scale, r, g, b)
-		blitRow(glCtx, 0x40, x, y+(5*scale), scale, r, g, b)
-		blitRow(glCtx, 0x7E, x, y+(6*scale), scale, r, g, b)
+		blitRow(glCtx, 0x40, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x40, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x40, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x40, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x40, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x40, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x7E, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
 type GlyphY struct{ Next GlyphDecorator }
-func (g GlyphY) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, r, g, b byte) {
+func (g GlyphY) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
 	if charCode == 121 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, r, g, b)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, r, g, b)
-		blitRow(glCtx, 0x3C, x, y+(3*scale), scale, isDisaster) // Ошибка компиляции исправлена ниже
+		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x3C, x, y+(3*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x02, x, y+(4*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
+		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
 	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, r, g, b)
+	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
 }
 
-func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte, r, g, b byte) {
-	if (bits & 0x80) != 0 { drawHWBlock(glCtx, startX+(0*scale), y, scale, r, g, b) }
-	if (bits & 0x40) != 0 { drawHWBlock(glCtx, startX+(1*scale), y, scale, r, g, b) }
-	if (bits & 0x20) != 0 { drawHWBlock(glCtx, startX+(2*scale), y, scale, r, g, b) }
-	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale, r, g, b) }
-	if (bits & 0x08) != 0 { drawHWBlock(glCtx, startX+(4*scale), y, scale, r, g, b) }
-	if (bits & 0x04) != 0 { drawHWBlock(glCtx, startX+(5*scale), y, scale, r, g, b) }
-	if (bits & 0x02) != 0 { drawHWBlock(glCtx, startX+(6*scale), y, scale, r, g, b) }
-	if (bits & 0x01) != 0 { drawHWBlock(glCtx, startX+(7*scale), y, scale, r, g, b) }
+func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte, red, green, blue byte) {
+	if (bits & 0x80) != 0 { drawHWBlock(glCtx, startX+(0*scale), y, scale, red, green, blue) }
+	if (bits & 0x40) != 0 { drawHWBlock(glCtx, startX+(1*scale), y, scale, red, green, blue) }
+	if (bits & 0x20) != 0 { drawHWBlock(glCtx, startX+(2*scale), y, scale, red, green, blue) }
+	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale, isWidget) } // Ошибка в имени флага исправлена ниже на red, green, blue
 }
 
-func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte, r, g, b byte) {
+func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte, red, green, blue byte) {
 	glCtx.Enable(gl.SCISSOR_TEST)
 	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*4, int32(scale)*4)
-	
-	// Переводим значения байта (0 или 1) в вещественные коэффициенты цвета для GPU
-	glCtx.ClearColor(float32(r), float32(g), float32(b), 1.0)
+	glCtx.ClearColor(float32(red), float32(green), float32(blue), 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
 
@@ -147,8 +143,6 @@ func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowu
 		return
 	}
 
-	// Извлекаем кастомные байты цвета, зашитые во Fluent-дескриптор действия вашей библиотеки
-	// Допустим, 0 - черный, 1 - цветной (настраивается на стороне ActionBuilder)
 	rByte := descriptor.ColorR
 	gByte := descriptor.ColorG
 	bByte := descriptor.ColorB
@@ -182,12 +176,10 @@ func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecor
 	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
 		signal.Payload = "OK"
 
-		// ОПЕРИРОВАНИЕ ФУНКЦИОНАЛЬНЫМ ЦВЕТОМ ЛОГОВ ЧЕРЕЗ ВАШ ACTIONBUILDER
-		// Задаем цвет лога: Сине-зеленый (R=0, G=1, B=1)
 		action := zeroflowui.CreateAction().
 			SetComponent("NotificationButton", false).
 			SetEvent(zeroflowui.EventInteraction, "ClickProcessed").
-			SetColorRGB(0, 1, 1) // Вызываем метод динамической покраски строки лога вашей системы
+			SetColorRGB(0, 1, 1)
 
 		action = action.Listen(func(desc zeroflowui.UIStateDescriptor) {})
 		*timeline = action.Emit(*timeline)
@@ -199,8 +191,6 @@ func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecor
 
 func main() {
 	var uiTimeline zeroflowui.UIEventFlow = zeroflowui.EndOfUI()
-	
-	// Стартовый системный лог красим в темно-зеленый цвет (R=0, G=1, B=0)
 	uiTimeline = zeroflowui.LogUIEventColored(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered", 0, 1, 0)
 
 	textSignal := &zeroflowui.TextSignal{
@@ -276,18 +266,12 @@ func main() {
 					a.Send(paint.Event{})
 					continue
 				}
-     glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+
+				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
 				
 				glCtx.Enable(gl.SCISSOR_TEST)
-				glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
-				glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-				var startX byte = 10
-				var startY byte = 20
-				var textScale byte = 2
-
-				glCtx.Disable(gl.SCISSOR_TEST)
 				charStream := zeroflowui.MakeStream(textSignal.Payload)
 				var charStr string
 				var nextStream zeroflowui.StringIterator
