@@ -292,8 +292,8 @@ var nextStream zeroflowui.StringIterator
 var isEnd bool
 charStr, nextStream, isEnd = charStream()
 if !isEnd && charStr != "" {
-     // ИСПРАВЛЕНИЕ: Поэтапное, плоское раскрытие указателя для прохождения чекера 
-     gomobilestrPtr := unsafe.Pointer(&charStr)
+     // ИСПРАВЛЕНИЕ: Поэтапное, плоское раскрытие указателя для прохождения чекера gomobile
+     strPtr := unsafe.Pointer(&charStr)
      dataPtr := *(*unsafe.Pointer)(strPtr)
      var rawByte1 byte = *(*byte)(dataPtr)
      sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0)
