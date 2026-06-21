@@ -287,23 +287,31 @@ var textScale byte = 2
 glCtx.Disable(gl.SCISSOR_TEST)
 charStream := zeroflowui.MakeStream(textSignal.Payload)
 var charStr string
-var nextStream zeroflowui.StringIteratorvar 
+var nextStream
+zeroflowui.StringIteratorvar 
 isEnd bool
 charStr, nextStream, isEnd = charStream()
+
 if !isEnd && charStr != "" {
+
    strPtr := unsafe.Pointer(&charStr)
    dataPtr := *(*unsafe.Pointer)(strPtr)
    var rawByte1 byte = *(*byte)(dataPtr)
    // Главный статус OK/WW всегда выводим черным цветом (0, 0, 0)
    sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0, 0, 0)
    charStr, nextStream, isEnd = nextStream()
-   if !isEnd && charStr != "" {
+   
+    if !isEnd && charStr != "" {
+
       strPtr2 := unsafe.Pointer(&charStr)
       dataPtr2 := *(*unsafe.Pointer)(strPtr2)
       var rawByte2 byte = *(*byte)(dataPtr2)
       sysAtlas.Chain.RenderGlyph(glCtx, rawByte2, startX+20, startY, textScale, 0, 0, 0)
+
    }
+
 }
+
 var topRightX byte = byte(sz.WidthPx>>2) - 15
 var screenHeightByte byte = byte(sz.HeightPx >> 2)
 // Выводим кастомные цветные логи в правый верхний угол дисплея
