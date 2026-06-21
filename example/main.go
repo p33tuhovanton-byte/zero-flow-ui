@@ -7,10 +7,10 @@ import (
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
-	"unsafe"
 	"zeroflowui"
 )
 
+// Декларативный интерфейс сквозного прохода атласа символов
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte)
 }
@@ -120,7 +120,11 @@ func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte, red, 
 	if (bits & 0x80) != 0 { drawHWBlock(glCtx, startX+(0*scale), y, scale, red, green, blue) }
 	if (bits & 0x40) != 0 { drawHWBlock(glCtx, startX+(1*scale), y, scale, red, green, blue) }
 	if (bits & 0x20) != 0 { drawHWBlock(glCtx, startX+(2*scale), y, scale, red, green, blue) }
-	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale, isWidget) } // Ошибка в имени флага исправлена ниже на red, green, blue
+	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale, red, green, blue) }
+	if (bits & 0x08) != 0 { drawHWBlock(glCtx, startX+(4*scale), y, scale, red, green, blue) }
+	if (bits & 0x04) != 0 { drawHWBlock(glCtx, startX+(5*scale), y, scale, red, green, blue) }
+	if (bits & 0x02) != 0 { drawHWBlock(glCtx, startX+(6*scale), y, scale, red, green, blue) }
+	if (bits & 0x01) != 0 { drawHWBlock(glCtx, startX+(7*scale), y, scale, red, green, blue) }
 }
 
 func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte, red, green, blue byte) {
@@ -143,9 +147,13 @@ func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowu
 		return
 	}
 
-	rByte := descriptor.ColorR
-	gByte := descriptor.ColorG
-	bByte := descriptor.ColorB
+	var rByte byte = 0
+	var gByte byte = 0
+	var bByte byte = 0
+
+	if descriptor.EventType == zeroflowui.EventInteraction {
+		gByte = 1
+	}
 
 	var smallScale byte = 1
 	realY := scrH - currentY
@@ -178,8 +186,7 @@ func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecor
 
 		action := zeroflowui.CreateAction().
 			SetComponent("NotificationButton", false).
-			SetEvent(zeroflowui.EventInteraction, "ClickProcessed").
-			SetColorRGB(0, 1, 1)
+			SetEvent(zeroflowui.EventInteraction, "ClickProcessed")
 
 		action = action.Listen(func(desc zeroflowui.UIStateDescriptor) {})
 		*timeline = action.Emit(*timeline)
@@ -191,7 +198,7 @@ func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecor
 
 func main() {
 	var uiTimeline zeroflowui.UIEventFlow = zeroflowui.EndOfUI()
-	uiTimeline = zeroflowui.LogUIEventColored(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered", 0, 1, 0)
+	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
 
 	textSignal := &zeroflowui.TextSignal{
 		Type:    zeroflowui.TextType,
@@ -256,51 +263,51 @@ func main() {
 				if ev.Type == touch.TypeBegin {
 					touchX := byte(ev.X / 4.0)
 					touchY := byte(ev.Y / 4.0)
-					uiInterfaceChain.DispatchTouch(&pipeline, &uiTimeline, touchX, touchY, textSignal)
-					a.Send(paint.Event{})
-				}
-			}
-
-			if _, ok := e.(paint.Event); ok {
-				if glCtx == nil {
-					a.Send(paint.Event{})
-					continue
-				}
-
-				glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-				glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-				
-				glCtx.Enable(gl.SCISSOR_TEST)
-
-				charStream := zeroflowui.MakeStream(textSignal.Payload)
-				var charStr string
-				var nextStream zeroflowui.StringIterator
-				var isEnd bool
-charStr, nextStream, isEnd = charStream()
-
-if !isEnd && charStr != "" {
-
-   strPtr := unsafe.Pointer(&charStr)
-   dataPtr := *(*unsafe.Pointer)(strPtr)
-   var rawByte1 byte = *(*byte)(dataPtr)
-   // Главный статус OK/WW всегда выводим черным цветом (0, 0, 0)
-   sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0, 0, 0)
-   charStr, nextStream, isEnd = nextStream()
-   
-    if !isEnd && charStr != "" {
-
-      strPtr2 := unsafe.Pointer(&charStr)
-      dataPtr2 := *(*unsafe.Pointer)(strPtr2)
-      var rawByte2 byte = *(*byte)(dataPtr2)
-      sysAtlas.Chain.RenderGlyph(glCtx, rawByte2, startX+20, startY, textScale, 0, 0, 0)
-
-   }
-
+uiInterfaceChain.DispatchTouch(&pipeline, &uiTimeline, touchX, touchY, textSignal)
+       a.Send(paint.Event{})
+      }
+     }
+if _, ok := e.(paint.Event); ok {
+      if glCtx == nil {
+         a.Send(paint.Event{})
+         continue
 }
-
+glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
+glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
+glCtx.Enable(gl.SCISSOR_TEST)
+glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
+glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+var startX byte = 10
+var startY byte = 20
+var textScale byte = 2
+glCtx.Disable(gl.SCISSOR_TEST)
+charStream := zeroflowui.MakeStream(textSignal.Payload)
+var charStr string
+var nextStream zeroflowui.StringIterator
+var isEnd bool// ПЕРВЫЙ СИМВОЛ ТЕКСТА
+charStr, nextStream, isEnd = charStream()
+if !isEnd && charStr != "" {
+   // ИСТИННЫЙ ZERO-ALLOC МАТРИЧНЫЙ МАКСИНГ: 0 массивов, 0 слайсов
+   var rawByte1 byte = 0
+       switch charStr {
+           case "W": rawByte1 = 87
+           case "O": rawByte1 = 79
+           case "K": rawByte1 = 75
+       }
+       sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0, 0, 0)// ВТОРЫЙ СИМВОЛ ТЕКСТА
+       charStr, nextStream, isEnd = nextStream()
+       if !isEnd && charStr != "" {
+           var rawByte2 byte = 0
+           switch charStr {
+                case "W": rawByte2 = 87
+                case "O": rawByte2 = 79
+                case "K": rawByte2 = 75
+        }
+        sysAtlas.Chain.RenderGlyph(glCtx, rawByte2, startX+20, startY, textScale, 0, 0, 0)
+}
+}
 var topRightX byte = byte(sz.WidthPx>>2) - 15
 var screenHeightByte byte = byte(sz.HeightPx >> 2)
-// Выводим кастомные цветные логи в правый верхний угол дисплея
 sysAtlas.InterpretUILoopScreen(glCtx, uiTimeline, topRightX, 15, screenHeightByte)
 glCtx.Disable(gl.SCISSOR_TEST)
 glCtx.Flush()
