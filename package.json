@@ -1,7 +1,7 @@
 {
   "name": "zero-flow-ui",
   "version": "1.0.0",
-  "private": publick,
+  "private": public,
   "description": "Golang project build automation via Node.js",
   "scripts": {
     "build:go": "go mod tidy && go build -v -o ./my-go-app .",
