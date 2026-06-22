@@ -41,6 +41,15 @@ func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIC
 	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
 }
 
+// ButtonGlyphState отвечает за отрисовку символов внутри кнопки ('W', 'O')
+type ButtonGlyphState struct{}
+
+func (ButtonGlyphState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
+	// Выводим символы кнопки 'W' и 'O' со смещением на 4 пикселя
+	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
+	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
+}
+
 // --- ИТЕНЕРАТОР СТРОК НА ТИПАХ-СИГНАЛАХ (ВМЕСТО МЕТОДА INTERPRETUI) ---
 
 // ScreenStreamIterator отвечает за проход по строкам экрана
@@ -67,7 +76,6 @@ func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
 
 	// Спускаемся на следующую строчку. Смещение на 8 пикселей задано через rune-константу '\x08'
-	// Это решает проблему наложения текста без использования переменных и чисел
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
 		CurrentY:         ctx.CurrentY - '\x08',
@@ -144,19 +152,26 @@ type ApplicationRunner struct {
 }
 
 func (runner ApplicationRunner) Start(a app.App) {
-	// Точка входа в бесконечный жизненный цикл x/mobile. 
-	// Вместо циклов здесь управление передается внутренней структуре событий zeroflowui.
+	// Точка входа в бесконечный жизненный цикл x/mobile
 }
 
-// --- ТОЧКА ЗАПУСКА КОНВЕЙЕРА КАДРА ---
+// --- ТОЧКА ЗАПУСКА КОНВЕЙЕРА КАДРА (С ОЧИСТКОЙ И БЕЛЫМ ФОНОМ) ---
 
 func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext UIContext) {
-	// Сборка интерфейса экрана как графа типов
+	// ВМЕСТО CLEARCOLOR СО ЗНАЧЕНИЕМ 1.0 (FLOAT) ИСПОЛЬЗУЕМ МАКСИМАЛЬНЫЙ БАЙТ В RUNE РАЗРЯДЕ
+	// Установка белого цвета фона OpenGL через шестнадцатеричные сигналы без float
+	glCtx.ClearColor('\x01', '\x01', '\x01', '\x01')
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+
+	// Сборка интерфейса экрана как графа типов. Теперь включает строку с символами кнопки
 	ActiveScreenRow{
-		CurrentRowState: InteractionState{},
+		CurrentRowState: ButtonGlyphState{}, // СНАЧАЛА РИСУЕМ КНОПКУ С СИМВОЛАМИ 'W' И 'O'
 		NextRow: ActiveScreenRow{
-			CurrentRowState: DefaultState{},
-			NextRow:         EndOfScreenStream{},
+			CurrentRowState: InteractionState{},
+			NextRow: ActiveScreenRow{
+				CurrentRowState: DefaultState{},
+				NextRow:         EndOfScreenStream{},
+			},
 		},
 	}.RenderNextRow(glCtx, atlas, initialContext)
 }
@@ -164,8 +179,7 @@ func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext
 // --- ТОЧКА ВХОДА В ПРОГРАММУ (FUNC MAIN) ---
 
 func main() {
-	// Запуск мобильного приложения через чистый объект-раннер без анонимных функций
-	// Координаты экрана передаются как rune-символы во внутренние структуры
+	// Запуск мобильного приложения через чистый объект-раннер
 	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{},
 	}.Start)
