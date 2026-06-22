@@ -13,50 +13,46 @@ import (
 // НАЧАЛО ИНТЕГРИРОВАННОГО ЯДРА БИБЛИОТЕКИ ZEROFLOWUI
 // ============================================================================
 
-// UIStateDescriptor инкапсулирует тип и описание текущего состояния
 type UIStateDescriptor struct {
 	EventType rune
 	Message   rune
 }
 
-// Константы типов событий zeroflowui, выраженные через rune-символы
 const (
 	EventLifecycle   rune = 'L'
 	EventInteraction rune = 'I'
 )
 
-// ZeroFlowEngine реализует ядро обработки и диспетчеризации полиморфного потока
 type ZeroFlowEngine struct{}
 
-func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, ctx UIContext, atlas StructuralAtlas) {
+func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, runner *ApplicationRunner, atlas StructuralAtlas) {
 	if ev, ok := rawEvent.(lifecycle.Event); ok {
-		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, ctx, atlas)
+		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, runner, atlas)
 	}
 	if ev, ok := rawEvent.(size.Event); ok {
-		ActiveTypeMatcher{}.MatchSize(ev, node, a, ctx, atlas)
+		ActiveTypeMatcher{}.MatchSize(ev, node, a, runner, atlas)
 	}
 	if ev, ok := rawEvent.(touch.Event); ok {
-		ActiveTypeMatcher{}.MatchTouch(ev, node, a, ctx, atlas)
+		ActiveTypeMatcher{}.MatchTouch(ev, node, a, runner, atlas)
 	}
 	if ev, ok := rawEvent.(paint.Event); ok {
-		ActiveTypeMatcher{}.MatchPaint(ev, node, a, ctx, atlas)
+		ActiveTypeMatcher{}.MatchPaint(ev, node, a, runner, atlas)
 	}
 }
 
-// ActiveTypeMatcher распределяет поток выполнения без использования условных инструкций
 type ActiveTypeMatcher struct{}
 
-func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
-	node.ProcessLifecycle(a, ev, ctx, atlas)
+func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.ProcessLifecycle(a, ev, runner, atlas)
 }
-func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
-	node.ProcessSize(a, ev, ctx, atlas)
+func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.ProcessSize(a, ev, runner, atlas)
 }
-func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
-	node.ProcessTouch(a, ev, ctx, atlas)
+func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.ProcessTouch(a, ev, runner, atlas)
 }
-func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
-	node.ProcessPaint(a, ev, ctx, atlas)
+func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.ProcessPaint(a, ev, runner, atlas)
 }
 
 // ============================================================================
@@ -88,7 +84,6 @@ type RenderState interface {
 	RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext)
 }
 
-// RightAnchoredButtonState фиксирует кнопку символов 'W' и 'O' у правого края экрана
 type RightAnchoredButtonState struct{}
 
 func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
@@ -143,57 +138,61 @@ func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas
 // ============================================================================
 
 type MobileEventChain interface {
-	ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas)
-	ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas)
-	ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas)
-	ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas)
+	ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas)
+	ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas)
+	ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas)
+	ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)
 }
 
 type BaseEventChainNode struct {
 	Next MobileEventChain
 }
 
-func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {
-	node.Next.ProcessLifecycle(a, ev, ctx, atlas)
+func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.Next.ProcessLifecycle(a, ev, runner, atlas)
 }
-func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas) {
-	node.Next.ProcessSize(a, ev, ctx, atlas)
+func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.Next.ProcessSize(a, ev, runner, atlas)
 }
-func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas) {
-	node.Next.ProcessTouch(a, ev, ctx, atlas)
+func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.Next.ProcessTouch(a, ev, runner, atlas)
 }
-func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas) {
-	node.Next.ProcessPaint(a, ev, ctx, atlas)
+func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	node.Next.ProcessPaint(a, ev, runner, atlas)
 }
 
-// LifecycleNode управляет созданием и уничтожением контекста рисования
+// LifecycleNode перехватывает графический контекст OpenGL из DrawContext
 type LifecycleNode struct {
 	BaseEventChainNode
 }
 
-func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {
+func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	// Безопасное сохранение контекста в верхнеуровневый контейнер при смене стадий
+	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
+		runner.GL = glCtx
+	}
 	a.Send(paint.Event{})
-	node.Next.ProcessLifecycle(a, ev, ctx, atlas)
+	node.Next.ProcessLifecycle(a, ev, runner, atlas)
 }
 
-// SizeNode адаптирует и фиксирует размеры EdgeX под текущее разрешение экрана
 type SizeNode struct {
 	BaseEventChainNode
 }
 
-func (node SizeNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas) {
+func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
 	a.Send(paint.Event{})
-	node.Next.ProcessSize(a, ev, ctx, atlas)
+	node.Next.ProcessSize(a, ev, runner, atlas)
 }
 
-// PaintNode запускает рендеринг белого фона, кнопок и статусов
+// PaintNode использует сохраненный на этапе Lifecycle контекст runner.GL
 type PaintNode struct {
 	BaseEventChainNode
 }
 
-func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas) {
-	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
-		OpenGLBackgroundAdapter{}.ClearTargetScreen(glCtx, 255)
+func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	// Рисуем только если контекст OpenGL уже захвачен и валиден
+	if runner.GL != nil {
+		OpenGLBackgroundAdapter{}.ClearTargetScreen(runner.GL, 255)
 		
 		ActiveScreenRow{
 			CurrentRowState: RightAnchoredButtonState{},
@@ -204,20 +203,19 @@ func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atl
 					NextRow:         EndOfScreenStream{},
 				},
 			},
-		}.RenderNextRow(glCtx, atlas, ctx)
+		}.RenderNextRow(runner.GL, atlas, runner.InitialContext)
 		
 		a.Publish()
 	}
-	node.Next.ProcessPaint(a, ev, ctx, atlas)
+	node.Next.ProcessPaint(a, ev, runner, atlas)
 }
 
-// TerminalEventNode гасит необработанные сигналы на конце цепи
 type TerminalEventNode struct{}
 
-func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {}
-func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas)           {}
-func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas)          {}
-func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas)          {}
+func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {}
+func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas)           {}
+func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
+func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
 
 // ============================================================================
 // ОБЯЗАТЕЛЬНЫЕ КОНТРАКТЫ, ИНТЕРФЕЙСЫ И СТРУКТУРЫ РЕНДЕРИНГА ГЛИФОВ
@@ -244,19 +242,19 @@ type ApplicationRunner struct {
 	InitialContext UIContext
 	EventPipeline  MobileEventChain
 	Engine         ZeroFlowEngine
+	GL             gl.Context // Поле-репозиторий для хранения текущего контекста OpenGL
 }
 
 func (runner ApplicationRunner) Start(a app.App) {
 	for e := range a.Events() {
-		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, runner.InitialContext, runner.Atlas)
+		// Передаем указатель на runner (&runner) по цепочке для легального мутирования стейта контекста
+		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, &runner, runner.Atlas)
 	}
 }
 
 // --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
 
 func main() {
-	// Исправлено синтаксическое форматирование вложенных литералов структур.
-	// Теперь строго после каждой закрывающей фигурной скобки стоит запятая.
 	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{},
 		InitialContext: UIContext{
