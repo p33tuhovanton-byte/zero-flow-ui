@@ -286,7 +286,7 @@ app.Main(ApplicationRunner{
 		},
 		Engine: ZeroFlowEngine{},
 		EventPipeline: LifecycleNode{
-			BaseEventChainNode: BaseEventChainNode{
+			BaseEventChainNode:    BaseEventChainNode{
 				Next: SizeNode{
 					BaseEventChainNode: BaseEventChainNode{
 					BaseEventChainNode: BaseEventChainNode{
