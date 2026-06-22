@@ -3,7 +3,6 @@ package main
 import (
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/gl"
-	"zeroflowui"
 )
 
 // GraphicContext — контейнер для графического API без запрещенных примитивов
