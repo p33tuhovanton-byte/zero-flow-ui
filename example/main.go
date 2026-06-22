@@ -273,8 +273,8 @@ func (runner ApplicationRunner) Start(a app.App) {
 	}
 }
 
-// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
-
+// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) --
+func main() {
 app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{
 			Chain: ActiveHardwareGlyphRenderer{},
@@ -289,4 +289,17 @@ app.Main(ApplicationRunner{
 			BaseEventChainNode: BaseEventChainNode{
 				Next: SizeNode{
 					BaseEventChainNode: BaseEventChainNode{
-					BaseEventChainNode: BaseEventChainNode{Next: PaintNode{BaseEventChainNode: BaseEventChainNode{Next: TerminalEventNode{},},},},},},},},},}.Start)}
+					BaseEventChainNode: BaseEventChainNode{
+      Next: PaintNode{
+BaseEventChainNode: BaseEventChainNode{
+      Next: TerminalEventNode{},
+},
+},
+},
+},
+},
+},
+},
+},
+}.Start)
+}
