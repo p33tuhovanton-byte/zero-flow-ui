@@ -212,5 +212,5 @@ func main() {
 				},
 			},
 		},
-	}.Start()
+	}.Start(app) 
 }
