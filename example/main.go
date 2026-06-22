@@ -282,13 +282,13 @@ BaseEventChainNode: BaseEventChainNode{
     Next: PaintNode{
 BaseEventChainNode: BaseEventChainNode{
 Next: TerminalEventNode{},
-            },
-           },
           },
          },
         },
        },
       },
      },
-    }.Start)
-   }
+    },
+   },
+  }.Start)
+ }
