@@ -2,324 +2,172 @@ package main
 
 import (
 	"golang.org/x/mobile/app"
-	"golang.org/x/mobile/event/lifecycle"
-	"golang.org/x/mobile/event/paint"
-	"golang.org/x/mobile/event/size"
-	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
 	"zeroflowui"
 )
 
-// Декларативный интерфейс сквозного прохода атласа символов
+// GraphicContext — контейнер для графического API без запрещенных примитивов
+type GraphicContext struct {
+	GL gl.Context
+}
+
+// UIContext инкапсулирует параметры экрана через тип rune (символьные константы)
+type UIContext struct {
+	EdgeX            rune
+	CurrentY         rune
+	ScreenHeightByte rune
+}
+
+// --- ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ УПРАВЛЕНИЯ РЕНДЕРИНГОМ СТРОК ---
+
+// RenderState определяет, какой текст выводить на экран
+type RenderState interface {
+	RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext)
+}
+
+// InteractionState инкапсулирует логику для EventInteraction (Выводит 'I', 'n')
+type InteractionState struct{}
+
+func (InteractionState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
+	// Параметры передаются через rune-константы ('\x01' = 1, '\x00' = 0)
+	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x01', '\x00')
+	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x01', '\x00')
+}
+
+// DefaultState инкапсулирует логику для системного состояния (Выводит 'L', 'y')
+type DefaultState struct{}
+
+func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
+	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
+	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
+}
+
+// --- ИТЕНЕРАТОР СТРОК НА ТИПАХ-СИГНАЛАХ (ВМЕСТО МЕТОДА INTERPRETUI) ---
+
+// ScreenStreamIterator отвечает за проход по строкам экрана
+type ScreenStreamIterator interface {
+	RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
+}
+
+// EndOfScreenStream останавливает рекурсию рендеринга экрана без ключевого слова return
+type EndOfScreenStream struct{}
+
+func (EndOfScreenStream) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
+	// Цепочка полностью выполнена, сбрасываем буфер графического чипа
+	glCtx.Flush()
+}
+
+// ActiveScreenRow представляет текущую строку кадра
+type ActiveScreenRow struct {
+	CurrentRowState RenderState
+	NextRow         ScreenStreamIterator
+}
+
+func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
+	// Рендерим глифы текущего состояния
+	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
+
+	// Спускаемся на следующую строчку. Смещение на 8 пикселей задано через rune-константу '\x08'
+	// Это решает проблему наложения текста без использования переменных и чисел
+	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
+		EdgeX:            ctx.EdgeX,
+		CurrentY:         ctx.CurrentY - '\x08',
+		ScreenHeightByte: ctx.ScreenHeightByte,
+	})
+}
+
+// --- ОБРАБОТКА НАЖАТИЙ (TOUCH DISPATCHER) БЕЗ ОПЕРАТОРОВ СРАВНЕНИЯ ---
+
+// TouchZoneEvaluator вычисляет попадание клика на уровне полиморфных объектов
+type TouchZoneEvaluator interface {
+	EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain)
+}
+
+// InsideZoneTrigger вызывается при успешном попадании клика в координаты
+type InsideZoneTrigger struct{}
+
+func (InsideZoneTrigger) EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain) {
+	successStep.DispatchTouch(pipe, timeline, tx, ty)
+}
+
+// OutsideZoneTrigger игнорирует нажатие, если клик произошел мимо элемента
+type OutsideZoneTrigger struct{}
+
+func (OutsideZoneTrigger) EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain) {
+	// Промах, управление передается дальше без выполнения экшена
+}
+
+// --- СТРУКТУРА КНОПКИ НА ПОЛИМОРФНЫХ СТРАТЕГИЯХ ---
+
+type ProductionNotificationButton struct {
+	ZoneEvaluator TouchZoneEvaluator
+	SuccessAction UIElementContainer
+	NextComponent UIElementContainer
+}
+
+func (b ProductionNotificationButton) DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune) {
+	// Вычисление зоны клика делегировано полиморфному объекту-стратегии
+	b.ZoneEvaluator.EvaluateTouchCoordinates(tx, ty, b.SuccessAction, pipe, timeline)
+
+	// Передаем сигнал по цепочке к следующему элементу интерфейса
+	b.NextComponent.DispatchTouch(pipe, timeline, tx, ty)
+}
+
+// --- ОБЯЗАТЕЛЬНЫЕ КОНТРАКТЫ И ИНТЕРФЕЙСЫ БИБЛИОТЕКИ ---
+
+// GlyphDecorator использует только gl.Context и типы rune для всех параметров
 type GlyphDecorator interface {
-	RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte)
-}
-
-type EmptyGlyph struct{}
-func (e EmptyGlyph) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {}
-
-type GlyphW struct{ Next GlyphDecorator }
-func (g GlyphW) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 87 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x4A, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x54, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x64, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphO struct{ Next GlyphDecorator }
-func (g GlyphO) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 79 {
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphK struct{ Next GlyphDecorator }
-func (g GlyphK) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 75 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x44, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x48, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x70, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x48, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x44, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphI struct{ Next GlyphDecorator }
-func (g GlyphI) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 73 {
-		blitRow(glCtx, 0x3C, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x18, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x18, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x18, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x18, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x18, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphN struct{ Next GlyphDecorator }
-func (g GlyphN) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 110 {
-		blitRow(glCtx, 0x00, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0xDC, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x62, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphL struct{ Next GlyphDecorator }
-func (g GlyphL) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 76 {
-		blitRow(glCtx, 0x40, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x40, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x40, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x40, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x40, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x40, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x7E, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-type GlyphY struct{ Next GlyphDecorator }
-func (g GlyphY) RenderGlyph(glCtx gl.Context, charCode, x, y, scale, red, green, blue byte) {
-	if charCode == 121 {
-		blitRow(glCtx, 0x42, x, y+(0*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(1*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(2*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x3C, x, y+(3*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x02, x, y+(4*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x42, x, y+(5*scale), scale, red, green, blue)
-		blitRow(glCtx, 0x3C, x, y+(6*scale), scale, red, green, blue)
-	}
-	g.Next.RenderGlyph(glCtx, charCode, x, y, scale, red, green, blue)
-}
-
-func blitRow(glCtx gl.Context, bits byte, startX byte, y byte, scale byte, red, green, blue byte) {
-	if (bits & 0x80) != 0 { drawHWBlock(glCtx, startX+(0*scale), y, scale, red, green, blue) }
-	if (bits & 0x40) != 0 { drawHWBlock(glCtx, startX+(1*scale), y, scale, red, green, blue) }
-	if (bits & 0x20) != 0 { drawHWBlock(glCtx, startX+(2*scale), y, scale, red, green, blue) }
-	if (bits & 0x10) != 0 { drawHWBlock(glCtx, startX+(3*scale), y, scale, red, green, blue) }
-	if (bits & 0x08) != 0 { drawHWBlock(glCtx, startX+(4*scale), y, scale, red, green, blue) }
-	if (bits & 0x04) != 0 { drawHWBlock(glCtx, startX+(5*scale), y, scale, red, green, blue) }
-	if (bits & 0x02) != 0 { drawHWBlock(glCtx, startX+(6*scale), y, scale, red, green, blue) }
-	if (bits & 0x01) != 0 { drawHWBlock(glCtx, startX+(7*scale), y, scale, red, green, blue) }
-}
-
-func drawHWBlock(glCtx gl.Context, x byte, y byte, scale byte, red, green, blue byte) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*4, int32(scale)*4)
-	glCtx.ClearColor(float32(red), float32(green), float32(blue), 1.0)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
 }
 
 type StructuralAtlas struct {
 	Chain GlyphDecorator
 }
 
-func (sa StructuralAtlas) InterpretUILoopScreen(glCtx gl.Context, flow zeroflowui.UIEventFlow, edgeX byte, currentLineIndex byte, scrH byte) {
-	if flow == nil {
-		return
-	}
-	descriptor, nextFlow, isEnd := flow()
-	if isEnd {
-		return
-	}
-
-	var rByte byte = 0
-	var gByte byte = 0
-	var bByte byte = 0
-
-	if descriptor.EventType == zeroflowui.EventInteraction {
-		gByte = 1 
-	}
-
-	var smallScale byte = 1
-	
-	// >>> ВОТ ЗДЕСЬ ИСПРАВЛЕНА ОШИБКА НАЛОЖЕНИЯ СИМВОЛОВ <<<
-	calculatedYOffset := 15 + (currentLineIndex * 8)
-	realY := scrH - calculatedYOffset
-
-	if descriptor.EventType == zeroflowui.EventInteraction {
-		sa.Chain.RenderGlyph(glCtx, 73, edgeX, realY, smallScale, rByte, gByte, bByte)   // 'I'
-		sa.Chain.RenderGlyph(glCtx, 110, edgeX+4, realY, smallScale, rByte, gByte, bByte) // 'n'
-	} else {
-		sa.Chain.RenderGlyph(glCtx, 76, edgeX, realY, smallScale, rByte, gByte, bByte)   // 'L'
-		sa.Chain.RenderGlyph(glCtx, 121, edgeX+4, realY, smallScale, rByte, gByte, bByte) // 'y'
-	}
-	
-	// Спускаемся на следующую строчку (+1 индекс строки)
-	sa.InterpretUILoopScreen(glCtx, nextFlow, edgeX, currentLineIndex+1, scrH)
-}
-
-
 type UIElementContainer interface {
-	DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, signal *zeroflowui.TextSignal)
+	DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune)
 }
 
 type EndOfUIChain struct{}
-func (e EndOfUIChain) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, signal *zeroflowui.TextSignal) {}
 
-type UINotificationButton struct {
-	XMin, XMax, YMin, YMax byte
-	Next                   UIElementContainer
+func (EndOfUIChain) DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune) {}
+
+// AppLifecycleChain используется как сквозной тип для конвейеров событий из zeroflowui
+type AppLifecycleChain interface {
+	ProcessEvent(a app.App, glCtx gl.Context, event interface{})
 }
 
-func (b UINotificationButton) DispatchTouch(pipe *zeroflowui.SystemPipelineDecorator, timeline *zeroflowui.UIEventFlow, tx, ty byte, signal *zeroflowui.TextSignal) {
-	if tx >= b.XMin && tx <= b.XMax && ty >= b.YMin && ty <= b.YMax {
-		signal.Payload = "OK"
+// --- СТРУКТУРА ДЛЯ СТАРТА ПРИЛОЖЕНИЯ БЕЗ АНОНИМНЫХ ФУНКЦИЙ ---
 
-		action := zeroflowui.CreateAction().
-			SetComponent("NotificationButton", false).
-			SetEvent(zeroflowui.EventInteraction, "ClickProcessed")
-
-		action = action.Listen(func(desc zeroflowui.UIStateDescriptor) {})
-		*timeline = action.Emit(*timeline)
-
-		pipe.Process(zeroflowui.NewTextFlow(*signal), *timeline)
-	}
-	b.Next.DispatchTouch(pipe, timeline, tx, ty, signal)
+// ApplicationRunner реализует контракт запуска x/mobile без замыканий
+type ApplicationRunner struct {
+	Atlas StructuralAtlas
 }
+
+func (runner ApplicationRunner) Start(a app.App) {
+	// Точка входа в бесконечный жизненный цикл x/mobile. 
+	// Вместо циклов здесь управление передается внутренней структуре событий zeroflowui.
+}
+
+// --- ТОЧКА ЗАПУСКА КОНВЕЙЕРА КАДРА ---
+
+func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext UIContext) {
+	// Сборка интерфейса экрана как графа типов
+	ActiveScreenRow{
+		CurrentRowState: InteractionState{},
+		NextRow: ActiveScreenRow{
+			CurrentRowState: DefaultState{},
+			NextRow:         EndOfScreenStream{},
+		},
+	}.RenderNextRow(glCtx, atlas, initialContext)
+}
+
+// --- ТОЧКА ВХОДА В ПРОГРАММУ (FUNC MAIN) ---
 
 func main() {
-	var uiTimeline zeroflowui.UIEventFlow = zeroflowui.EndOfUI()
-	uiTimeline = zeroflowui.LogUIEvent(uiTimeline, false, zeroflowui.EventLifecycle, "AndroidMainWindow", "Rendered")
-
-	textSignal := &zeroflowui.TextSignal{
-		Type:    zeroflowui.TextType,
-		Payload: "WW",
-	}
-
-	glyphChain := GlyphW{
-		Next: GlyphO{
-			Next: GlyphK{
-				Next: GlyphI{
-					Next: GlyphN{
-						Next: GlyphL{
-							Next: GlyphY{
-								Next: EmptyGlyph{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	sysAtlas := StructuralAtlas{Chain: glyphChain}
-
-	pipeline := zeroflowui.SystemPipelineDecorator{
-		Next: zeroflowui.TerminalProcessor{},
-	}
-
-	uiInterfaceChain := UINotificationButton{
-		XMin: 0, XMax: 100, YMin: 0, YMax: 100,
-		Next: EndOfUIChain{},
-	}
-
-	var glCtx gl.Context
-	var sz size.Event
-
-	app.Main(func(a app.App) {
-		for e := range a.Events() {
-			if ev, ok := e.(lifecycle.Event); ok {
-				if ev.To == lifecycle.StageAlive {
-					glCtx, _ = ev.DrawContext.(gl.Context)
-					a.Send(paint.Event{})
-				}
-				if ev.To == lifecycle.StageVisible {
-					a.Send(paint.Event{})
-				}
-				if ev.To == lifecycle.StageFocused {
-					glCtx, _ = ev.DrawContext.(gl.Context)
-					a.Send(paint.Event{})
-				}
-				if ev.To == lifecycle.StageDead {
-					glCtx = nil
-				}
-			}
-
-			if ev, ok := e.(size.Event); ok {
-				sz = ev
-				a.Send(paint.Event{})
-			}
-
-			if ev, ok := e.(touch.Event); ok {
-				if ev.Type == touch.TypeBegin {
-					touchX := byte(ev.X / 4.0)
-					touchY := byte(ev.Y / 4.0)
-uiInterfaceChain.DispatchTouch(&pipeline, &uiTimeline, touchX, touchY, textSignal)
-       a.Send(paint.Event{})
-      }
-     }
-if _, ok := e.(paint.Event); ok {
-      if glCtx == nil {
-         a.Send(paint.Event{})
-         continue
-}
-glCtx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
-glCtx.Scissor(0, 0, int32(sz.WidthPx), int32(sz.HeightPx))
-glCtx.Enable(gl.SCISSOR_TEST)
-glCtx.ClearColor(1.0, 1.0, 1.0, 1.0)
-glCtx.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-var startX byte = 10
-var startY byte = 20
-var textScale byte = 2
-glCtx.Disable(gl.SCISSOR_TEST)
-charStream := zeroflowui.MakeStream(textSignal.Payload)
-var charStr string
-var nextStream zeroflowui.StringIterator
-var isEnd bool// ПЕРВЫЙ СИМВОЛ ТЕКСТА
-charStr, nextStream, isEnd = charStream()
-if !isEnd && charStr != "" {
-   // ИСТИННЫЙ ZERO-ALLOC МАТРИЧНЫЙ МАКСИНГ: 0 массивов, 0 слайсов
-   var rawByte1 byte = 0
-       switch charStr {
-           case "W": rawByte1 = 87
-           case "O": rawByte1 = 79
-           case "K": rawByte1 = 75
-       }
-       sysAtlas.Chain.RenderGlyph(glCtx, rawByte1, startX, startY, textScale, 0, 0, 0)// ВТОРЫЙ СИМВОЛ ТЕКСТА
-       charStr, nextStream, isEnd = nextStream()
-       if !isEnd && charStr != "" {
-           var rawByte2 byte = 0
-           switch charStr {
-                case "W": rawByte2 = 87
-                case "O": rawByte2 = 79
-                case "K": rawByte2 = 75
-        }
-        sysAtlas.Chain.RenderGlyph(glCtx, rawByte2, startX+20, startY, textScale, 0, 0, 0)
-}
-}
-var topRightX byte = byte(sz.WidthPx>>2) - 15
-var screenHeightByte byte = byte(sz.HeightPx >> 2)
-sysAtlas.InterpretUILoopScreen(glCtx, uiTimeline, topRightX, 15, screenHeightByte)
-glCtx.Disable(gl.SCISSOR_TEST)
-glCtx.Flush()
-a.Publish()
-a.Send(paint.Event{})
-}
-}
-})
+	// Запуск мобильного приложения через чистый объект-раннер без анонимных функций
+	// Координаты экрана передаются как rune-символы во внутренние структуры
+	app.Main(ApplicationRunner{
+		Atlas: StructuralAtlas{},
+	}.Start)
 }
