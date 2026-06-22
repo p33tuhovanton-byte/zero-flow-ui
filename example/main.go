@@ -29,7 +29,6 @@ const (
 type ZeroFlowEngine struct{}
 
 func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, ctx UIContext, atlas StructuralAtlas) {
-	// Безопасное приведение типов (Double Dispatch) через интерфейс рантайма x/mobile.
 	if ev, ok := rawEvent.(lifecycle.Event); ok {
 		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, ctx, atlas)
 	}
@@ -77,7 +76,6 @@ type UIContext struct {
 type OpenGLBackgroundAdapter struct{}
 
 func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue rune) {
-	// Нормализация rune в диапазон 0.0 - 1.0 без промежуточных переменных (255.0 / 255.0 = 1.0)
 	glCtx.ClearColor(float32(colorValue)/255.0, float32(colorValue)/255.0, float32(colorValue)/255.0, 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
@@ -123,7 +121,7 @@ type ScreenStreamIterator interface {
 type EndOfScreenStream struct{}
 
 func (EndOfScreenStream) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	glCtx.Flush() // Поток строк исчерпан, публикуем графический буфер
+	glCtx.Flush()
 }
 
 type ActiveScreenRow struct {
@@ -133,7 +131,6 @@ type ActiveScreenRow struct {
 
 func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
-	// Динамическое смещение каретки кадра (-8) исключает ошибку наложения символов
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
 		CurrentY:         ctx.CurrentY - 8,
@@ -185,7 +182,7 @@ type SizeNode struct {
 }
 
 func (node SizeNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas) {
-	a.Send(paint.Event{}) // Масштаб изменен, шлем запрос на немедленную перерисовку
+	a.Send(paint.Event{})
 	node.Next.ProcessSize(a, ev, ctx, atlas)
 }
 
@@ -250,8 +247,6 @@ type ApplicationRunner struct {
 }
 
 func (runner ApplicationRunner) Start(a app.App) {
-	// Бесконечный цикл событий x/mobile. Импорты 'lifecycle', 'size', 'touch', 'paint'
-	// теперь гарантированно используются внутри вызова DispatchSignal
 	for e := range a.Events() {
 		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, runner.InitialContext, runner.Atlas)
 	}
@@ -260,6 +255,8 @@ func (runner ApplicationRunner) Start(a app.App) {
 // --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
 
 func main() {
+	// Исправлено синтаксическое форматирование вложенных литералов структур.
+	// Теперь строго после каждой закрывающей фигурной скобки стоит запятая.
 	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{},
 		InitialContext: UIContext{
@@ -267,19 +264,19 @@ func main() {
 			CurrentY:         100,
 			ScreenHeightByte: 240,
 		},
-  Engine: ZeroFlowEngine{},
-  EventPipeline: LifecycleNode{
-   BaseEventChainNode: BaseEventChainNode{
-    Next: SizeNode{
-     BaseEventChainNode: BaseEventChainNode{
-      Next: PaintNode{
-       BaseEventChainNode: BaseEventChainNode{
-        Next: TerminalEventNode{},
-       }
-      }
-     }
-    }
-   }
-  }
- }.Start) 
+		Engine: ZeroFlowEngine{},
+		EventPipeline: LifecycleNode{
+			BaseEventChainNode: BaseEventChainNode{
+				Next: SizeNode{
+					BaseEventChainNode: BaseEventChainNode{
+						Next: PaintNode{
+							BaseEventChainNode: BaseEventChainNode{
+								Next: TerminalEventNode{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}.Start)
 }
