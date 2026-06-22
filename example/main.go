@@ -275,29 +275,18 @@ func (runner ApplicationRunner) Start(a app.App) {
 
 // --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
 
-func main() {
-  app.Main(ApplicationRunner{
-// ЗАМЕНЕНО: Теперь передается рабочий     ActiveHardwareGlyphRenderer{} вместо заглушки!
-Atlas: StructuralAtlas{
-Chain: ActiveHardwareGlyphRenderer{},
-},
-InitialContext: UIContext{
-EdgeX:            160,
-CurrentY:         100,
-ScreenHeightByte: 240,},
-Engine: ZeroFlowEngine{},
-EventPipeline: LifecycleNode{BaseEventChainNode: BaseEventChainNode{
-Next: SizeNode{BaseEventChainNode: BaseEventChainNode{
-Next: TouchNode{BaseEventChainNode: BaseEventChainNode{
-Next: PaintNode{BaseEventChainNode: BaseEventChainNode{
-Next: TerminalEventNode{},
-},
-},
-},
-},
-},
-},
-},
-},
-}.Start)}
-}
+app.Main(ApplicationRunner{
+		Atlas: StructuralAtlas{
+			Chain: ActiveHardwareGlyphRenderer{},
+		},
+		InitialContext: UIContext{
+			EdgeX:            160,
+			CurrentY:         100,
+			ScreenHeightByte: 240,
+		},
+		Engine: ZeroFlowEngine{},
+		EventPipeline: LifecycleNode{
+			BaseEventChainNode: BaseEventChainNode{
+				Next: SizeNode{
+					BaseEventChainNode: BaseEventChainNode{
+					BaseEventChainNode: BaseEventChainNode{Next: PaintNode{BaseEventChainNode: BaseEventChainNode{Next: TerminalEventNode{},},},},},},},},},}.Start)}
