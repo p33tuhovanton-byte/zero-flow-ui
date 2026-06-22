@@ -290,6 +290,14 @@ EventPipeline: LifecycleNode{BaseEventChainNode: BaseEventChainNode{
 Next: SizeNode{BaseEventChainNode: BaseEventChainNode{
 Next: TouchNode{BaseEventChainNode: BaseEventChainNode{
 Next: PaintNode{BaseEventChainNode: BaseEventChainNode{
-Next: TerminalEventNode{},},},},},},},},},}.Start)}
-  
+Next: TerminalEventNode{},
+},
+},
+},
+},
+},
+},
+},
+},
+}.Start)}
 }
