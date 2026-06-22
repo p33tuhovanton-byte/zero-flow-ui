@@ -161,36 +161,46 @@ func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *A
 	node.Next.ProcessPaint(a, ev, runner, atlas)
 }
 
-// LifecycleNode перехватывает графический контекст OpenGL из DrawContext
+// LifecycleNode изолирует вызовы перерисовки только для стадий создания сцены
 type LifecycleNode struct {
 	BaseEventChainNode
 }
 
 func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	// Безопасное сохранение контекста в верхнеуровневый контейнер при смене стадий
 	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
 		runner.GL = glCtx
+		a.Send(paint.Event{}) // Шлем запрос кадра ТОЛЬКО при инициализации контекста
 	}
-	a.Send(paint.Event{})
 	node.Next.ProcessLifecycle(a, ev, runner, atlas)
 }
 
+// SizeNode больше не спамит холостыми paint.Event{} при тапах
 type SizeNode struct {
 	BaseEventChainNode
 }
 
 func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	a.Send(paint.Event{})
+	// Событие изменения размера окна изолировано, управление идет дальше по цепи
 	node.Next.ProcessSize(a, ev, runner, atlas)
 }
 
-// PaintNode использует сохраненный на этапе Lifecycle контекст runner.GL
+// TouchNode обрабатывает нажатия без циклического вызова самоотправки сигналов кадра
+type TouchNode struct {
+	BaseEventChainNode
+}
+
+func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
+	// Здесь будет происходить полиморфный вызов DispatchTouch для контейнера кнопок.
+	// ВАЖНО: Мы убрали вызов a.Send(paint.Event{}), что устраняет зацикливание и вылет приложения.
+	node.Next.ProcessTouch(a, ev, runner, atlas)
+}
+
+// PaintNode стабильно отрисовывает UI, когда система Android готова его принять
 type PaintNode struct {
 	BaseEventChainNode
 }
 
 func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	// Рисуем только если контекст OpenGL уже захвачен и валиден
 	if runner.GL != nil {
 		OpenGLBackgroundAdapter{}.ClearTargetScreen(runner.GL, 255)
 		
@@ -242,12 +252,11 @@ type ApplicationRunner struct {
 	InitialContext UIContext
 	EventPipeline  MobileEventChain
 	Engine         ZeroFlowEngine
-	GL             gl.Context // Поле-репозиторий для хранения текущего контекста OpenGL
+	GL             gl.Context
 }
 
 func (runner ApplicationRunner) Start(a app.App) {
 	for e := range a.Events() {
-		// Передаем указатель на runner (&runner) по цепочке для легального мутирования стейта контекста
 		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, &runner, runner.Atlas)
 	}
 }
@@ -265,16 +274,21 @@ func main() {
 		Engine: ZeroFlowEngine{},
 		EventPipeline: LifecycleNode{
 			BaseEventChainNode: BaseEventChainNode{
-				Next: SizeNode{
-					BaseEventChainNode: BaseEventChainNode{
-						Next: PaintNode{
-							BaseEventChainNode: BaseEventChainNode{
-								Next: TerminalEventNode{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}.Start)
-}
+    Next: SizeNode{
+BaseEventChainNode: BaseEventChainNode{
+    Next: TouchNode{ 
+// Добавлен узел фильтрации тапов
+BaseEventChainNode: BaseEventChainNode{
+    Next: PaintNode{
+BaseEventChainNode: BaseEventChainNode{
+Next: TerminalEventNode{},
+            },
+           },
+          },
+         },
+        },
+       },
+      },
+     },
+    }.Start)
+   }
