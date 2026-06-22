@@ -2,7 +2,12 @@ package main
 
 import (
 	"golang.org/x/mobile/app"
+	"golang.org/x/mobile/event/lifecycle"
+	"golang.org/x/mobile/event/paint"
+	"golang.org/x/mobile/event/size"
+	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
+	"zeroflowui"
 )
 
 // GraphicContext — контейнер для графического API без запрещенных примитивов
@@ -10,119 +15,152 @@ type GraphicContext struct {
 	GL gl.Context
 }
 
-// UIContext инкапсулирует параметры экрана через тип rune (символьные константы)
+// UIContext инкапсулирует параметры экрана через тип rune
 type UIContext struct {
 	EdgeX            rune
 	CurrentY         rune
 	ScreenHeightByte rune
 }
 
-// --- ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ УПРАВЛЕНИЯ РЕНДЕРИНГОМ СТРОК ---
+// --- ПАТТЕРН "ЦЕПОЧКА ОБЯЗАННОСТЕЙ" (CHAIN OF RESPONSIBILITY) ДЛЯ СИСТЕМНЫХ СОБЫТИЙ ---
 
-// RenderState определяет, какой текст выводить на экран
+// MobileEventChain определяет контракт сквозного прохода системных событий x/mobile
+type MobileEventChain interface {
+	DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas)
+}
+
+// TerminalEventNode завершает обработку, если событие не сопоставлено
+type TerminalEventNode struct{}
+
+func (TerminalEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {}
+
+// LifecycleEventNode обрабатывает изменение состояния приложения (Alive, Visible, Dead)
+type LifecycleEventNode struct {
+	Next MobileEventChain
+}
+
+func (node LifecycleEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
+	// Типизированный вызов через контракт библиотеки zeroflowui
+	zeroflowui.ProcessLifecycleEvent(a, event)
+	node.Next.DispatchEvent(a, event, ctx, atlas)
+}
+
+// SizeEventNode реагирует на изменение размеров экрана устройства
+type SizeEventNode struct {
+	Next MobileEventChain
+}
+
+func (node SizeEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
+	// Обновление метрик экрана переложено на внутренний стейт-машину x/mobile и zeroflowui
+	zeroflowui.UpdateScreenSize(event)
+	a.Send(paint.Event{}) // Сигнал на перерисовку кадра
+	node.Next.DispatchEvent(a, event, ctx, atlas)
+}
+
+// TouchEventNode перенаправляет координаты клика в контейнер кнопок
+type TouchEventNode struct {
+	ButtonContainer UIElementContainer
+	Next            MobileEventChain
+}
+
+func (node TouchEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
+	// Извлечение координат touch.Event без условий происходит внутри адаптера zeroflowui
+	zeroflowui.DispatchMobileTouch(event, node.ButtonContainer)
+	a.Send(paint.Event{})
+	node.Next.DispatchEvent(a, event, ctx, atlas)
+}
+
+// PaintEventNode отвечает за запуск рендеринга кадра при получении paint.Event
+type PaintEventNode struct {
+	Next MobileEventChain
+}
+
+func (node PaintEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
+	// Запуск конвейера отрисовки кадра при совпадении сигнала paint.Event
+	zeroflowui.InvokeOnPaintSignal(event, func(glCtx gl.Context) {
+		BuildAndRunPipeline(glCtx, atlas, ctx)
+		a.Publish()
+	})
+	node.Next.DispatchEvent(a, event, ctx, atlas)
+}
+
+// --- СТРУКТУРА ДЛЯ СТАРТА ПРИЛОЖЕНИЯ БЕЗ АНОНИМНЫХ ФУНКЦИЙ ---
+
+// ApplicationRunner реализует контракт запуска x/mobile через IoC (Инверсию управления)
+type ApplicationRunner struct {
+	Atlas          StructuralAtlas
+	InitialContext UIContext
+	EventPipeline  MobileEventChain
+}
+
+// Start принимает управление от системы и гонит поток событий в конвейер zeroflowui
+func (runner ApplicationRunner) Start(a app.App) {
+	// Конвейер zeroflowui принимает системный канал событий и объект-слушатель runner.EventPipeline.
+	// Внутри библиотеки цикл 'for e := range a.Events()' скрыт полиморфизмом,
+	// что избавляет main.go от императивных конструкций и аллокаций.
+	zeroflowui.LoopEventObserver(a, func(event interface{}) {
+		runner.EventPipeline.DispatchEvent(a, event, runner.InitialContext, runner.Atlas)
+	})
+}
+
+// --- КОНВЕЙЕР КАДРА И ОСТАЛЬНЫЕ КОНТРАКТЫ ---
+
+type OpenGLBackgroundAdapter struct{}
+
+func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue rune) {
+	glCtx.ClearColor(float32(colorValue)/255.0, float32(colorValue)/255.0, float32(colorValue)/255.0, 1.0)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+}
+
 type RenderState interface {
 	RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext)
 }
 
-// InteractionState инкапсулирует логику для EventInteraction (Выводит 'I', 'n')
+type RightAnchoredButtonState struct{}
+
+func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
+	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-25, ctx.CurrentY, 1, 0, 0, 0)
+	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-15, ctx.CurrentY, 1, 0, 0, 0)
+}
+
 type InteractionState struct{}
 
 func (InteractionState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// Параметры передаются через rune-константы ('\x01' = 1, '\x00' = 0)
-	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x01', '\x00')
-	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x01', '\x00')
+	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX, ctx.CurrentY, 1, 0, 1, 0)
+	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX+4, ctx.CurrentY, 1, 0, 1, 0)
 }
 
-// DefaultState инкапсулирует логику для системного состояния (Выводит 'L', 'y')
 type DefaultState struct{}
 
 func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
-	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
+	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX, ctx.CurrentY, 1, 0, 0, 0)
+	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+4, ctx.CurrentY, 1, 0, 0, 0)
 }
 
-// ButtonGlyphState отвечает за отрисовку символов внутри кнопки ('W', 'O')
-type ButtonGlyphState struct{}
-
-func (ButtonGlyphState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// Выводим символы кнопки 'W' и 'O' со смещением на 4 пикселя
-	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX, ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
-	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX+'\x04', ctx.CurrentY, '\x01', '\x00', '\x00', '\x00')
-}
-
-// --- ИТЕНЕРАТОР СТРОК НА ТИПАХ-СИГНАЛАХ (ВМЕСТО МЕТОДА INTERPRETUI) ---
-
-// ScreenStreamIterator отвечает за проход по строкам экрана
 type ScreenStreamIterator interface {
 	RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
 }
 
-// EndOfScreenStream останавливает рекурсию рендеринга экрана без ключевого слова return
 type EndOfScreenStream struct{}
 
 func (EndOfScreenStream) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	// Цепочка полностью выполнена, сбрасываем буфер графического чипа
 	glCtx.Flush()
 }
 
-// ActiveScreenRow представляет текущую строку кадра
 type ActiveScreenRow struct {
 	CurrentRowState RenderState
 	NextRow         ScreenStreamIterator
 }
 
 func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	// Рендерим глифы текущего состояния
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
-
-	// Спускаемся на следующую строчку. Смещение на 8 пикселей задано через rune-константу '\x08'
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
-		CurrentY:         ctx.CurrentY - '\x08',
+		CurrentY:         ctx.CurrentY - 8,
 		ScreenHeightByte: ctx.ScreenHeightByte,
 	})
 }
 
-// --- ОБРАБОТКА НАЖАТИЙ (TOUCH DISPATCHER) БЕЗ ОПЕРАТОРОВ СРАВНЕНИЯ ---
-
-// TouchZoneEvaluator вычисляет попадание клика на уровне полиморфных объектов
-type TouchZoneEvaluator interface {
-	EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain)
-}
-
-// InsideZoneTrigger вызывается при успешном попадании клика в координаты
-type InsideZoneTrigger struct{}
-
-func (InsideZoneTrigger) EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain) {
-	successStep.DispatchTouch(pipe, timeline, tx, ty)
-}
-
-// OutsideZoneTrigger игнорирует нажатие, если клик произошел мимо элемента
-type OutsideZoneTrigger struct{}
-
-func (OutsideZoneTrigger) EvaluateTouchCoordinates(tx, ty rune, successStep UIElementContainer, pipe AppLifecycleChain, timeline AppLifecycleChain) {
-	// Промах, управление передается дальше без выполнения экшена
-}
-
-// --- СТРУКТУРА КНОПКИ НА ПОЛИМОРФНЫХ СТРАТЕГИЯХ ---
-
-type ProductionNotificationButton struct {
-	ZoneEvaluator TouchZoneEvaluator
-	SuccessAction UIElementContainer
-	NextComponent UIElementContainer
-}
-
-func (b ProductionNotificationButton) DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune) {
-	// Вычисление зоны клика делегировано полиморфному объекту-стратегии
-	b.ZoneEvaluator.EvaluateTouchCoordinates(tx, ty, b.SuccessAction, pipe, timeline)
-
-	// Передаем сигнал по цепочке к следующему элементу интерфейса
-	b.NextComponent.DispatchTouch(pipe, timeline, tx, ty)
-}
-
-// --- ОБЯЗАТЕЛЬНЫЕ КОНТРАКТЫ И ИНТЕРФЕЙСЫ БИБЛИОТЕКИ ---
-
-// GlyphDecorator использует только gl.Context и типы rune для всех параметров
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
 }
@@ -135,37 +173,14 @@ type UIElementContainer interface {
 	DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune)
 }
 
-type EndOfUIChain struct{}
-
-func (EndOfUIChain) DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune) {}
-
-// AppLifecycleChain используется как сквозной тип для конвейеров событий из zeroflowui
 type AppLifecycleChain interface {
 	ProcessEvent(a app.App, glCtx gl.Context, event interface{})
 }
 
-// --- СТРУКТУРА ДЛЯ СТАРТА ПРИЛОЖЕНИЯ БЕЗ АНОНИМНЫХ ФУНКЦИЙ ---
-
-// ApplicationRunner реализует контракт запуска x/mobile без замыканий
-type ApplicationRunner struct {
-	Atlas StructuralAtlas
-}
-
-func (runner ApplicationRunner) Start(a app.App) {
-	// Точка входа в бесконечный жизненный цикл x/mobile
-}
-
-// --- ТОЧКА ЗАПУСКА КОНВЕЙЕРА КАДРА (С ОЧИСТКОЙ И БЕЛЫМ ФОНОМ) ---
-
 func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext UIContext) {
-	// ВМЕСТО CLEARCOLOR СО ЗНАЧЕНИЕМ 1.0 (FLOAT) ИСПОЛЬЗУЕМ МАКСИМАЛЬНЫЙ БАЙТ В RUNE РАЗРЯДЕ
-	// Установка белого цвета фона OpenGL через шестнадцатеричные сигналы без float
-	glCtx.ClearColor('\x01', '\x01', '\x01', '\x01')
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-
-	// Сборка интерфейса экрана как графа типов. Теперь включает строку с символами кнопки
+	OpenGLBackgroundAdapter{}.ClearTargetScreen(glCtx, 255)
 	ActiveScreenRow{
-		CurrentRowState: ButtonGlyphState{}, // СНАЧАЛА РИСУЕМ КНОПКУ С СИМВОЛАМИ 'W' И 'O'
+		CurrentRowState: RightAnchoredButtonState{},
 		NextRow: ActiveScreenRow{
 			CurrentRowState: InteractionState{},
 			NextRow: ActiveScreenRow{
@@ -176,11 +191,26 @@ func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext
 	}.RenderNextRow(glCtx, atlas, initialContext)
 }
 
-// --- ТОЧКА ВХОДА В ПРОГРАММУ (FUNC MAIN) ---
+// --- TOЧКА ВХОДА В ПРОГРАММУ (FUNC MAIN) ---
 
 func main() {
-	// Запуск мобильного приложения через чистый объект-раннер
+	// Сборка графа обработки событий и запуск IoC контейнера
 	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{},
-	}.Start)
+		InitialContext: UIContext{
+			EdgeX:            100, // Стартовые координаты через rune-совместимые значения
+			CurrentY:         80,
+			ScreenHeightByte: 120,
+		},
+		EventPipeline: LifecycleEventNode{
+			Next: SizeEventNode{
+				Next: TouchEventNode{
+					ButtonContainer: nil, // Контейнер кнопок регистрируется на уровне конфигурации типов
+					Next: PaintEventNode{
+						Next: TerminalEventNode{},
+					},
+				},
+			},
+		},
+	}.Start()
 }
