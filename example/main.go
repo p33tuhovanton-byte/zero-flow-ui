@@ -77,7 +77,7 @@ func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue ru
 }
 
 // ============================================================================
-// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ ИСКЛЮЧЕНИЯ IF/ELSE И SWITCH ПРИ ОТРИСОВКЕ
+// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ ИСКЛЮЧЕНИЯ IF/ELSE ПРИ ОТРИСОВКЕ
 // ============================================================================
 
 type RenderState interface {
@@ -161,7 +161,6 @@ func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *A
 	node.Next.ProcessPaint(a, ev, runner, atlas)
 }
 
-// LifecycleNode изолирует вызовы перерисовки только для стадий создания сцены
 type LifecycleNode struct {
 	BaseEventChainNode
 }
@@ -169,33 +168,28 @@ type LifecycleNode struct {
 func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
 	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
 		runner.GL = glCtx
-		a.Send(paint.Event{}) // Шлем запрос кадра ТОЛЬКО при инициализации контекста
+		a.Send(paint.Event{})
 	}
 	node.Next.ProcessLifecycle(a, ev, runner, atlas)
 }
 
-// SizeNode больше не спамит холостыми paint.Event{} при тапах
 type SizeNode struct {
 	BaseEventChainNode
 }
 
 func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	// Событие изменения размера окна изолировано, управление идет дальше по цепи
 	node.Next.ProcessSize(a, ev, runner, atlas)
 }
 
-// TouchNode обрабатывает нажатия без циклического вызова самоотправки сигналов кадра
 type TouchNode struct {
 	BaseEventChainNode
 }
 
 func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	// Здесь будет происходить полиморфный вызов DispatchTouch для контейнера кнопок.
-	// ВАЖНО: Мы убрали вызов a.Send(paint.Event{}), что устраняет зацикливание и вылет приложения.
+	// Событие Touch безопасно поглощается без вызова паники графического контекста
 	node.Next.ProcessTouch(a, ev, runner, atlas)
 }
 
-// PaintNode стабильно отрисовывает UI, когда система Android готова его принять
 type PaintNode struct {
 	BaseEventChainNode
 }
@@ -228,11 +222,18 @@ func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *Applica
 func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
 
 // ============================================================================
-// ОБЯЗАТЕЛЬНЫЕ КОНТРАКТЫ, ИНТЕРФЕЙСЫ И СТРУКТУРЫ РЕНДЕРИНГА ГЛИФОВ
+// ПАТТЕРН "NULL OBJECT" (ЗАГЛУШКА ДЛЯ ИСКЛЮЧЕНИЯ PANIC ПРИ ТАПАХ)
 // ============================================================================
 
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
+}
+
+// SafeNullGlyphRenderer реализует GlyphDecorator, гарантируя отсутствие nil pointer panic
+type SafeNullGlyphRenderer struct{}
+
+func (SafeNullGlyphRenderer) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
+	// Безопасная пустая операция: поглощает вызов без паники ядра и без аллокаций
 }
 
 type StructuralAtlas struct {
@@ -265,7 +266,10 @@ func (runner ApplicationRunner) Start(a app.App) {
 
 func main() {
 	app.Main(ApplicationRunner{
-		Atlas: StructuralAtlas{},
+		// Инициализация атласа безопасным Null-объектом вместо nil предотвращает вылет
+		Atlas: StructuralAtlas{
+			Chain: SafeNullGlyphRenderer{},
+		},
 		InitialContext: UIContext{
 			EdgeX:            160,
 			CurrentY:         100,
@@ -274,21 +278,9 @@ func main() {
 		Engine: ZeroFlowEngine{},
 		EventPipeline: LifecycleNode{
 			BaseEventChainNode: BaseEventChainNode{
-    Next: SizeNode{
+				Next: SizeNode{
+					BaseEventChainNode: BaseEventChainNode{
+						Next: TouchNode{
 BaseEventChainNode: BaseEventChainNode{
-    Next: TouchNode{ 
-// Добавлен узел фильтрации тапов
-BaseEventChainNode: BaseEventChainNode{
-    Next: PaintNode{
-BaseEventChainNode: BaseEventChainNode{
-Next: TerminalEventNode{},
-          },
-         },
-        },
-       },
-      },
-     },
-    },
-   },
-  }.Start)
- }
+       Next: PaintNode{BaseEventChainNode: BaseEventChainNode{
+       Next: TerminalEventNode{},},},},},},},},},}.Start)}
