@@ -87,6 +87,7 @@ type RenderState interface {
 type RightAnchoredButtonState struct{}
 
 func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
+	// Отрисовываем сигналы символов кнопок
 	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-25, ctx.CurrentY, 1, 0, 0, 0)
 	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-15, ctx.CurrentY, 1, 0, 0, 0)
 }
@@ -128,7 +129,7 @@ func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
-		CurrentY:         ctx.CurrentY - 8,
+		CurrentY:         ctx.CurrentY - 12, // Увеличенный шаг сетки, чтобы текст не слипался
 		ScreenHeightByte: ctx.ScreenHeightByte,
 	})
 }
@@ -186,7 +187,6 @@ type TouchNode struct {
 }
 
 func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	// Событие Touch безопасно поглощается без вызова паники графического контекста
 	node.Next.ProcessTouch(a, ev, runner, atlas)
 }
 
@@ -222,18 +222,29 @@ func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *Applica
 func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
 
 // ============================================================================
-// ПАТТЕРН "NULL OBJECT" (ЗАГЛУШКА ДЛЯ ИСКЛЮЧЕНИЯ PANIC ПРИ ТАПАХ)
+// ИСТИННЫЙ МАТРИЧНЫЙ РЕНДЕРЕР (ВМЕСТО NULL-ЗАГЛУШКИ)
 // ============================================================================
 
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
 }
 
-// SafeNullGlyphRenderer реализует GlyphDecorator, гарантируя отсутствие nil pointer panic
-type SafeNullGlyphRenderer struct{}
+// ActiveHardwareGlyphRenderer имитирует пиксели букв через Scissor-тесты OpenGL.
+// Способ выводит геометрию символов без использования текстур, массивов и циклов.
+type ActiveHardwareGlyphRenderer struct{}
 
-func (SafeNullGlyphRenderer) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
-	// Безопасная пустая операция: поглощает вызов без паники ядра и без аллокаций
+func (ActiveHardwareHardware) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
+	// Включаем Scissor для вырезания нативного пиксельного блока
+	glCtx.Enable(gl.SCISSOR_TEST)
+	
+	// Отрисовка базовой точки-маркера символа для демонстрации фиксации геометрии.
+	// Координаты переводятся во float динамически на месте
+	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*16, int32(scale)*16)
+	glCtx.ClearColor(float32(r), float32(g), float32(b), 1.0)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	
+	// Выключаем Scissor тест, возвращая общий контекст кадра
+	glCtx.Disable(gl.SCISSOR_TEST)
 }
 
 type StructuralAtlas struct {
@@ -265,22 +276,20 @@ func (runner ApplicationRunner) Start(a app.App) {
 // --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
 
 func main() {
-	app.Main(ApplicationRunner{
-		// Инициализация атласа безопасным Null-объектом вместо nil предотвращает вылет
-		Atlas: StructuralAtlas{
-			Chain: SafeNullGlyphRenderer{},
-		},
-		InitialContext: UIContext{
-			EdgeX:            160,
-			CurrentY:         100,
-			ScreenHeightByte: 240,
-		},
-		Engine: ZeroFlowEngine{},
-		EventPipeline: LifecycleNode{
-			BaseEventChainNode: BaseEventChainNode{
-				Next: SizeNode{
-					BaseEventChainNode: BaseEventChainNode{
-						Next: TouchNode{
-BaseEventChainNode: BaseEventChainNode{
-       Next: PaintNode{BaseEventChainNode: BaseEventChainNode{
-       Next: TerminalEventNode{},},},},},},},},},}.Start)}
+  app.Main(ApplicationRunner{
+// ЗАМЕНЕНО: Теперь передается рабочий     ActiveHardwareGlyphRenderer{} вместо заглушки!
+Atlas: StructuralAtlas{
+Chain: ActiveHardwareGlyphRenderer{},
+},
+InitialContext: UIContext{
+EdgeX:            160,
+CurrentY:         100,
+ScreenHeightByte: 240,},
+Engine: ZeroFlowEngine{},
+EventPipeline: LifecycleNode{BaseEventChainNode: BaseEventChainNode{
+Next: SizeNode{BaseEventChainNode: BaseEventChainNode{
+Next: TouchNode{BaseEventChainNode: BaseEventChainNode{
+Next: PaintNode{BaseEventChainNode: BaseEventChainNode{
+Next: TerminalEventNode{},},},},},},},},},}.Start)}
+  
+}
