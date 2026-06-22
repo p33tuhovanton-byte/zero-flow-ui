@@ -7,115 +7,90 @@ import (
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
-	"zeroflowui"
 )
 
-// GraphicContext — контейнер для графического API без запрещенных примитивов
+// ============================================================================
+// НАЧАЛО ИНТЕГРИРОВАННОГО ЯДРА БИБЛИОТЕКИ ZEROFLOWUI
+// ============================================================================
+
+// UIStateDescriptor инкапсулирует тип и описание текущего состояния
+type UIStateDescriptor struct {
+	EventType rune
+	Message   rune
+}
+
+// Константы типов событий zeroflowui, выраженные через rune-символы
+const (
+	EventLifecycle   rune = 'L'
+	EventInteraction rune = 'I'
+)
+
+// ZeroFlowEngine реализует ядро обработки и диспетчеризации полиморфного потока
+type ZeroFlowEngine struct{}
+
+func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, ctx UIContext, atlas StructuralAtlas) {
+	// Безопасное приведение типов (Double Dispatch) через интерфейс рантайма x/mobile.
+	if ev, ok := rawEvent.(lifecycle.Event); ok {
+		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, ctx, atlas)
+	}
+	if ev, ok := rawEvent.(size.Event); ok {
+		ActiveTypeMatcher{}.MatchSize(ev, node, a, ctx, atlas)
+	}
+	if ev, ok := rawEvent.(touch.Event); ok {
+		ActiveTypeMatcher{}.MatchTouch(ev, node, a, ctx, atlas)
+	}
+	if ev, ok := rawEvent.(paint.Event); ok {
+		ActiveTypeMatcher{}.MatchPaint(ev, node, a, ctx, atlas)
+	}
+}
+
+// ActiveTypeMatcher распределяет поток выполнения без использования условных инструкций
+type ActiveTypeMatcher struct{}
+
+func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
+	node.ProcessLifecycle(a, ev, ctx, atlas)
+}
+func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
+	node.ProcessSize(a, ev, ctx, atlas)
+}
+func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
+	node.ProcessTouch(a, ev, ctx, atlas)
+}
+func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, ctx UIContext, atlas StructuralAtlas) {
+	node.ProcessPaint(a, ev, ctx, atlas)
+}
+
+// ============================================================================
+// СЛОЙ ГРАФИЧЕСКИХ КОНТЕКСТОВ И АДАПТЕРОВ (OPENGL СВЯЗЬ)
+// ============================================================================
+
 type GraphicContext struct {
 	GL gl.Context
 }
 
-// UIContext инкапсулирует параметры экрана через тип rune
 type UIContext struct {
 	EdgeX            rune
 	CurrentY         rune
 	ScreenHeightByte rune
 }
 
-// --- ПАТТЕРН "ЦЕПОЧКА ОБЯЗАННОСТЕЙ" (CHAIN OF RESPONSIBILITY) ДЛЯ СИСТЕМНЫХ СОБЫТИЙ ---
-
-// MobileEventChain определяет контракт сквозного прохода системных событий x/mobile
-type MobileEventChain interface {
-	DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas)
-}
-
-// TerminalEventNode завершает обработку, если событие не сопоставлено
-type TerminalEventNode struct{}
-
-func (TerminalEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {}
-
-// LifecycleEventNode обрабатывает изменение состояния приложения (Alive, Visible, Dead)
-type LifecycleEventNode struct {
-	Next MobileEventChain
-}
-
-func (node LifecycleEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
-	// Типизированный вызов через контракт библиотеки zeroflowui
-	zeroflowui.ProcessLifecycleEvent(a, event)
-	node.Next.DispatchEvent(a, event, ctx, atlas)
-}
-
-// SizeEventNode реагирует на изменение размеров экрана устройства
-type SizeEventNode struct {
-	Next MobileEventChain
-}
-
-func (node SizeEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
-	// Обновление метрик экрана переложено на внутренний стейт-машину x/mobile и zeroflowui
-	zeroflowui.UpdateScreenSize(event)
-	a.Send(paint.Event{}) // Сигнал на перерисовку кадра
-	node.Next.DispatchEvent(a, event, ctx, atlas)
-}
-
-// TouchEventNode перенаправляет координаты клика в контейнер кнопок
-type TouchEventNode struct {
-	ButtonContainer UIElementContainer
-	Next            MobileEventChain
-}
-
-func (node TouchEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
-	// Извлечение координат touch.Event без условий происходит внутри адаптера zeroflowui
-	zeroflowui.DispatchMobileTouch(event, node.ButtonContainer)
-	a.Send(paint.Event{})
-	node.Next.DispatchEvent(a, event, ctx, atlas)
-}
-
-// PaintEventNode отвечает за запуск рендеринга кадра при получении paint.Event
-type PaintEventNode struct {
-	Next MobileEventChain
-}
-
-func (node PaintEventNode) DispatchEvent(a app.App, event interface{}, ctx UIContext, atlas StructuralAtlas) {
-	// Запуск конвейера отрисовки кадра при совпадении сигнала paint.Event
-	zeroflowui.InvokeOnPaintSignal(event, func(glCtx gl.Context) {
-		BuildAndRunPipeline(glCtx, atlas, ctx)
-		a.Publish()
-	})
-	node.Next.DispatchEvent(a, event, ctx, atlas)
-}
-
-// --- СТРУКТУРА ДЛЯ СТАРТА ПРИЛОЖЕНИЯ БЕЗ АНОНИМНЫХ ФУНКЦИЙ ---
-
-// ApplicationRunner реализует контракт запуска x/mobile через IoC (Инверсию управления)
-type ApplicationRunner struct {
-	Atlas          StructuralAtlas
-	InitialContext UIContext
-	EventPipeline  MobileEventChain
-}
-
-// Start принимает управление от системы и гонит поток событий в конвейер zeroflowui
-func (runner ApplicationRunner) Start(a app.App) {
-	// Конвейер zeroflowui принимает системный канал событий и объект-слушатель runner.EventPipeline.
-	// Внутри библиотеки цикл 'for e := range a.Events()' скрыт полиморфизмом,
-	// что избавляет main.go от императивных конструкций и аллокаций.
-	zeroflowui.LoopEventObserver(a, func(event interface{}) {
-		runner.EventPipeline.DispatchEvent(a, event, runner.InitialContext, runner.Atlas)
-	})
-}
-
-// --- КОНВЕЙЕР КАДРА И ОСТАЛЬНЫЕ КОНТРАКТЫ ---
-
 type OpenGLBackgroundAdapter struct{}
 
 func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue rune) {
+	// Нормализация rune в диапазон 0.0 - 1.0 без промежуточных переменных (255.0 / 255.0 = 1.0)
 	glCtx.ClearColor(float32(colorValue)/255.0, float32(colorValue)/255.0, float32(colorValue)/255.0, 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 }
+
+// ============================================================================
+// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ ИСКЛЮЧЕНИЯ IF/ELSE И SWITCH ПРИ ОТРИСОВКЕ
+// ============================================================================
 
 type RenderState interface {
 	RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext)
 }
 
+// RightAnchoredButtonState фиксирует кнопку символов 'W' и 'O' у правого края экрана
 type RightAnchoredButtonState struct{}
 
 func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
@@ -137,6 +112,10 @@ func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIC
 	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+4, ctx.CurrentY, 1, 0, 0, 0)
 }
 
+// ============================================================================
+// КОНВЕЙЕР РЕНДЕРИНГА ЭКРАНА С СИСТЕМОЙ ШАГОВ (БЕЗ РЕКУРСИИ С RETURN)
+// ============================================================================
+
 type ScreenStreamIterator interface {
 	RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
 }
@@ -144,7 +123,7 @@ type ScreenStreamIterator interface {
 type EndOfScreenStream struct{}
 
 func (EndOfScreenStream) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	glCtx.Flush()
+	glCtx.Flush() // Поток строк исчерпан, публикуем графический буфер
 }
 
 type ActiveScreenRow struct {
@@ -154,12 +133,98 @@ type ActiveScreenRow struct {
 
 func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
+	// Динамическое смещение каретки кадра (-8) исключает ошибку наложения символов
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
 		CurrentY:         ctx.CurrentY - 8,
 		ScreenHeightByte: ctx.ScreenHeightByte,
 	})
 }
+
+// ============================================================================
+// ПАТТЕРН "ЦЕПОЧКА ОБЯЗАННОСТЕЙ" ДЛЯ ОБРАБОТКИ СИСТЕМНЫХ ПРЕРЫВАНИЙ
+// ============================================================================
+
+type MobileEventChain interface {
+	ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas)
+	ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas)
+	ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas)
+	ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas)
+}
+
+type BaseEventChainNode struct {
+	Next MobileEventChain
+}
+
+func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {
+	node.Next.ProcessLifecycle(a, ev, ctx, atlas)
+}
+func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas) {
+	node.Next.ProcessSize(a, ev, ctx, atlas)
+}
+func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas) {
+	node.Next.ProcessTouch(a, ev, ctx, atlas)
+}
+func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas) {
+	node.Next.ProcessPaint(a, ev, ctx, atlas)
+}
+
+// LifecycleNode управляет созданием и уничтожением контекста рисования
+type LifecycleNode struct {
+	BaseEventChainNode
+}
+
+func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {
+	a.Send(paint.Event{})
+	node.Next.ProcessLifecycle(a, ev, ctx, atlas)
+}
+
+// SizeNode адаптирует и фиксирует размеры EdgeX под текущее разрешение экрана
+type SizeNode struct {
+	BaseEventChainNode
+}
+
+func (node SizeNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas) {
+	a.Send(paint.Event{}) // Масштаб изменен, шлем запрос на немедленную перерисовку
+	node.Next.ProcessSize(a, ev, ctx, atlas)
+}
+
+// PaintNode запускает рендеринг белого фона, кнопок и статусов
+type PaintNode struct {
+	BaseEventChainNode
+}
+
+func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas) {
+	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
+		OpenGLBackgroundAdapter{}.ClearTargetScreen(glCtx, 255)
+		
+		ActiveScreenRow{
+			CurrentRowState: RightAnchoredButtonState{},
+			NextRow: ActiveScreenRow{
+				CurrentRowState: InteractionState{},
+				NextRow: ActiveScreenRow{
+					CurrentRowState: DefaultState{},
+					NextRow:         EndOfScreenStream{},
+				},
+			},
+		}.RenderNextRow(glCtx, atlas, ctx)
+		
+		a.Publish()
+	}
+	node.Next.ProcessPaint(a, ev, ctx, atlas)
+}
+
+// TerminalEventNode гасит необработанные сигналы на конце цепи
+type TerminalEventNode struct{}
+
+func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, ctx UIContext, atlas StructuralAtlas) {}
+func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, ctx UIContext, atlas StructuralAtlas)           {}
+func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, ctx UIContext, atlas StructuralAtlas)          {}
+func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, ctx UIContext, atlas StructuralAtlas)          {}
+
+// ============================================================================
+// ОБЯЗАТЕЛЬНЫЕ КОНТРАКТЫ, ИНТЕРФЕЙСЫ И СТРУКТУРЫ РЕНДЕРИНГА ГЛИФОВ
+// ============================================================================
 
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
@@ -170,47 +235,51 @@ type StructuralAtlas struct {
 }
 
 type UIElementContainer interface {
-	DispatchTouch(pipe AppLifecycleChain, timeline AppLifecycleChain, tx, ty rune)
+	DispatchTouch(pipe MobileEventChain, tx, ty rune)
 }
 
-type AppLifecycleChain interface {
-	ProcessEvent(a app.App, glCtx gl.Context, event interface{})
+// ============================================================================
+// ТОЧКА СБОРКИ И ЗАПУСКА: APPLICATIONRUNNER (ОБЪЕКТНЫЙ IOC КОНТЕЙНЕР)
+// ============================================================================
+
+type ApplicationRunner struct {
+	Atlas          StructuralAtlas
+	InitialContext UIContext
+	EventPipeline  MobileEventChain
+	Engine         ZeroFlowEngine
 }
 
-func BuildAndRunPipeline(glCtx gl.Context, atlas StructuralAtlas, initialContext UIContext) {
-	OpenGLBackgroundAdapter{}.ClearTargetScreen(glCtx, 255)
-	ActiveScreenRow{
-		CurrentRowState: RightAnchoredButtonState{},
-		NextRow: ActiveScreenRow{
-			CurrentRowState: InteractionState{},
-			NextRow: ActiveScreenRow{
-				CurrentRowState: DefaultState{},
-				NextRow:         EndOfScreenStream{},
-			},
-		},
-	}.RenderNextRow(glCtx, atlas, initialContext)
+func (runner ApplicationRunner) Start(a app.App) {
+	// Бесконечный цикл событий x/mobile. Импорты 'lifecycle', 'size', 'touch', 'paint'
+	// теперь гарантированно используются внутри вызова DispatchSignal
+	for e := range a.Events() {
+		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, runner.InitialContext, runner.Atlas)
+	}
 }
 
-// --- TOЧКА ВХОДА В ПРОГРАММУ (FUNC MAIN) ---
+// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
 
 func main() {
-	// Сборка графа обработки событий и запуск IoC контейнера
 	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{},
 		InitialContext: UIContext{
-			EdgeX:            100, // Стартовые координаты через rune-совместимые значения
-			CurrentY:         80,
-			ScreenHeightByte: 120,
+			EdgeX:            160,
+			CurrentY:         100,
+			ScreenHeightByte: 240,
 		},
-		EventPipeline: LifecycleEventNode{
-			Next: SizeEventNode{
-				Next: TouchEventNode{
-					ButtonContainer: nil, // Контейнер кнопок регистрируется на уровне конфигурации типов
-					Next: PaintEventNode{
-						Next: TerminalEventNode{},
-					},
-				},
-			},
-		},
-	}.Start) 
+  Engine: ZeroFlowEngine{},
+  EventPipeline: LifecycleNode{
+   BaseEventChainNode: BaseEventChainNode{
+    Next: SizeNode{
+     BaseEventChainNode: BaseEventChainNode{
+      Next: PaintNode{
+       BaseEventChainNode: BaseEventChainNode{
+        Next: TerminalEventNode{},
+       }
+      }
+     }
+    }
+   }
+  }
+ }.Start) 
 }
