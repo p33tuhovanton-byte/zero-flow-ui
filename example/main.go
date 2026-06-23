@@ -278,8 +278,8 @@ func main()         {app.Main(ApplicationRunner{
     EdgeX: 180,
     CurrentY: 160, 
     ScreenHeightByte: 240,},
-Engine: ZeroFlowEngine{},
-EventPipeline: LifecycleNode{
+  Engine: ZeroFlowEngine{},
+  EventPipeline: LifecycleNode{
   BaseEventChainNode: BaseEventChainNode{
    Next: SizeNode{
     BaseEventChainNode: BaseEventChainNode{
