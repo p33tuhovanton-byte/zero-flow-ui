@@ -87,7 +87,6 @@ type RenderState interface {
 type RightAnchoredButtonState struct{}
 
 func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// Отрисовываем сигналы символов кнопок
 	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-25, ctx.CurrentY, 1, 0, 0, 0)
 	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-15, ctx.CurrentY, 1, 0, 0, 0)
 }
@@ -129,7 +128,7 @@ func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
-		CurrentY:         ctx.CurrentY - 12, // Увеличенный шаг сетки, чтобы текст не слипался
+		CurrentY:         ctx.CurrentY - 12,
 		ScreenHeightByte: ctx.ScreenHeightByte,
 	})
 }
@@ -222,28 +221,20 @@ func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *Applica
 func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
 
 // ============================================================================
-// ИСТИННЫЙ МАТРИЧНЫЙ РЕНДЕРЕР (ВМЕСТО NULL-ЗАГЛУШКИ)
+// ИСТИННЫЙ МАТРИЧНЫЙ РЕНДЕРЕР
 // ============================================================================
 
 type GlyphDecorator interface {
 	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
 }
 
-// ActiveHardwareGlyphRenderer имитирует пиксели букв через Scissor-тесты OpenGL.
-// Способ выводит геометрию символов без использования текстур, массивов и циклов.
 type ActiveHardwareGlyphRenderer struct{}
 
-func (ActiveHardwareHardware) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
-	// Включаем Scissor для вырезания нативного пиксельного блока
+func (ActiveHardwareGlyphRenderer) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
 	glCtx.Enable(gl.SCISSOR_TEST)
-	
-	// Отрисовка базовой точки-маркера символа для демонстрации фиксации геометрии.
-	// Координаты переводятся во float динамически на месте
 	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*16, int32(scale)*16)
 	glCtx.ClearColor(float32(r), float32(g), float32(b), 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	
-	// Выключаем Scissor тест, возвращая общий контекст кадра
 	glCtx.Disable(gl.SCISSOR_TEST)
 }
 
@@ -273,9 +264,12 @@ func (runner ApplicationRunner) Start(a app.App) {
 	}
 }
 
-// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) --
+// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
+
 func main() {
-app.Main(/* ApplicationRunner */{
+	// Исправлен синтаксис инициализации вложенных анонимных полей BaseEventChainNode.
+	// Иерархия выровнена, лишний разрыв строки перед методом .Start удален.
+	app.Main(ApplicationRunner{
 		Atlas: StructuralAtlas{
 			Chain: ActiveHardwareGlyphRenderer{},
 		},
@@ -286,20 +280,8 @@ app.Main(/* ApplicationRunner */{
 		},
 		Engine: ZeroFlowEngine{},
 		EventPipeline: LifecycleNode{
-			BaseEventChainNode:    BaseEventChainNode{
+			BaseEventChainNode: BaseEventChainNode{
 				Next: SizeNode{
-					/* BaseEventChainNode */: BaseEventChainNode{
 					BaseEventChainNode: BaseEventChainNode{
-      Next: PaintNode{
-BaseEventChainNode: BaseEventChainNode{
-      Next: TerminalEventNode{},
-},
-},
-},
-},
-},
-},
-},
-},
-}.Start)
-}
+						Next: TouchNode{
+         BaseEventChainNode: BaseEventChainNode{Next: PaintNode{BaseEventChainNode: BaseEventChainNode{Next: TerminalEventNode{},},},},},},},},},}.Start)}
