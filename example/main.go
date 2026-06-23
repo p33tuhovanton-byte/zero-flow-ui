@@ -286,21 +286,24 @@ type VectorL struct{}
 func (VectorL) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
 	glCtx.Enable(gl.SCISSOR_TEST)
 	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
- glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 4)   glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
+	
+ glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 4)   
+ glCtx.Clear(gl.COLOR_BUFFER_BIT)
  glCtx.Disable(gl.SCISSOR_TEST)
 }
 
 type VectorY struct{}
 
-func (VectorY) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {glCtx.Enable(gl.SCISSOR_TEST)
-glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-glCtx.Scissor(int32(x)*4, int32(y)*4, 12, 4)
-glCtx.Clear(gl.COLOR_BUFFER_BIT)
-glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 20)
-glCtx.Clear(gl.COLOR_BUFFER_BIT)
-glCtx.Disable(gl.SCISSOR_TEST)
+func (VectorY) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+ glCtx.Enable(gl.SCISSOR_TEST)
+ glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+ glCtx.Scissor(int32(x)*4, int32(y)*4, 12, 4)
+ glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 20)
+ glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Disable(gl.SCISSOR_TEST)
 }
 
 type StructuralAtlas struct {
