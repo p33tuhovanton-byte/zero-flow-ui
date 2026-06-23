@@ -10,58 +10,43 @@ import (
 )
 
 // ============================================================================
-// НАЧАЛО ИНТЕГРИРОВАННОГО ЯДРА БИБЛИОТЕКИ ZEROFLOWUI
+// ЯДРО ДИСПЕТЧЕРИЗАЦИИ СИГНАЛОВ ZEROFLOWUI БЕЗ IF И OK
 // ============================================================================
-
-type UIStateDescriptor struct {
-	EventType rune
-	Message   rune
-}
-
-const (
-	EventLifecycle   rune = 'L'
-	EventInteraction rune = 'I'
-)
 
 type ZeroFlowEngine struct{}
 
-func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, runner *ApplicationRunner, atlas StructuralAtlas) {
-	if ev, ok := rawEvent.(lifecycle.Event); ok {
-		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, runner, atlas)
-	}
-	if ev, ok := rawEvent.(size.Event); ok {
-		ActiveTypeMatcher{}.MatchSize(ev, node, a, runner, atlas)
-	}
-	if ev, ok := rawEvent.(touch.Event); ok {
-		ActiveTypeMatcher{}.MatchTouch(ev, node, a, runner, atlas)
-	}
-	if ev, ok := rawEvent.(paint.Event); ok {
-		ActiveTypeMatcher{}.MatchPaint(ev, node, a, runner, atlas)
+func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, runner *ApplicationRunner) {
+	// Двойная диспетчеризация (Double Dispatch) через полиморфные интерфейсы x/mobile
+	switch ev := rawEvent.(type) {
+	case lifecycle.Event:
+		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, runner)
+	case size.Event:
+		ActiveTypeMatcher{}.MatchSize(ev, node, a, runner)
+	case touch.Event:
+		ActiveTypeMatcher{}.MatchTouch(ev, node, a, runner)
+	case paint.Event:
+		ActiveTypeMatcher{}.MatchPaint(ev, node, a, runner)
 	}
 }
 
 type ActiveTypeMatcher struct{}
 
-func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.ProcessLifecycle(a, ev, runner, atlas)
+func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
+	node.ProcessLifecycle(a, ev, runner)
 }
-func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.ProcessSize(a, ev, runner, atlas)
+func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
+	node.ProcessSize(a, ev, runner)
 }
-func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.ProcessTouch(a, ev, runner, atlas)
+func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
+	node.ProcessTouch(a, ev, runner)
 }
-func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.ProcessPaint(a, ev, runner, atlas)
+func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
+	node.ProcessPaint(a, ev, runner)
 }
 
 // ============================================================================
-// СЛОЙ ГРАФИЧЕСКИХ КОНТЕКСТОВ И АДАПТЕРОВ (OPENGL СВЯЗЬ)
+// ГРАФИЧЕСКИЙ КОНТЕКСТ И АДАПТЕР ПОДЛОЖКИ
 // ============================================================================
-
-type GraphicContext struct {
-	GL gl.Context
-}
 
 type UIContext struct {
 	EdgeX            rune
@@ -77,39 +62,37 @@ func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue ru
 }
 
 // ============================================================================
-// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ ИСКЛЮЧЕНИЯ IF/ELSE ПРИ ОТРИСОВКЕ
+// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ СТРОК СТАТУСА UI
 // ============================================================================
 
 type RenderState interface {
-	RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext)
+	RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
 }
 
 type RightAnchoredButtonState struct{}
 
-func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// ИСПРАВЛЕНО: Увеличен шаг по оси X между 'W' и 'O' (с 10 до 20 пикселей), чтобы символы не сливались
-	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 0, 0)
-	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 0, 0)
+func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
+	atlas.W.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 0, 0)
+	atlas.O.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 0, 0)
+	atlas.K.DrawVector(glCtx, ctx.EdgeX-10, ctx.CurrentY, 0, 0, 0)
 }
 
 type InteractionState struct{}
 
-func (InteractionState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// ИСПРАВЛЕНО: Шаг каретки по горизонтали увеличен до 16 пикселей для читаемости строки 'In'
-	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 255, 0) // Зеленый маркер
-	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 255, 0)
+func (InteractionState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
+	atlas.I.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 255, 0)
+	atlas.N.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 255, 0)
 }
 
 type DefaultState struct{}
 
-func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	// ИСПРАВЛЕНО: Расстояние между 'L' и 'y' скорректировано под общую сетку
-	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 0, 0)
-	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 0, 0)
+func (DefaultState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
+	atlas.L.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 0, 0)
+	atlas.Y.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 0, 0)
 }
 
 // ============================================================================
-// КОНВЕЙЕР РЕНДЕРИНГА ЭКРАНА С СИСТЕМОЙ ШАГОВ (БЕЗ РЕКУРСИИ С RETURN)
+// ПОТОКОВЫЙ ИТЕРАТОР СЕТКИ СТРОК UI
 // ============================================================================
 
 type ScreenStreamIterator interface {
@@ -128,9 +111,7 @@ type ActiveScreenRow struct {
 }
 
 func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
-	// ИСПРАВЛЕНО: Шаг между строками увеличен с 12 до 24 пикселей.
-	// Это разнесет строки по вертикали и уберет наложение пикселей.
+	row.CurrentRowState.RenderGlyphs(glCtx, atlas, ctx)
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
 		CurrentY:         ctx.CurrentY - 24,
@@ -139,67 +120,71 @@ func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas
 }
 
 // ============================================================================
-// ПАТТЕРН "ЦЕПОЧКА ОБЯЗАННОСТЕЙ" ДЛЯ ОБРАБОТКИ СИСТЕМНЫХ ПРЕРЫВАНИЙ
+// ЦЕПОЧКА ОБРАБОТКИ СОБЫТИЙ С АВТО-МАСШТАБИРОВАНИЕМ СПРАВА
 // ============================================================================
 
 type MobileEventChain interface {
-	ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas)
-	ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas)
-	ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas)
-	ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)
+	ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner)
+	ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner)
+	ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner)
+	ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner)
 }
 
 type BaseEventChainNode struct {
 	Next MobileEventChain
 }
 
-func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessLifecycle(a, ev, runner, atlas)
+func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {
+	node.Next.ProcessLifecycle(a, ev, runner)
 }
-func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessSize(a, ev, runner, atlas)
+func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner) {
+	node.Next.ProcessSize(a, ev, runner)
 }
-func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessTouch(a, ev, runner, atlas)
+func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner) {
+	node.Next.ProcessTouch(a, ev, runner)
 }
-func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessPaint(a, ev, runner, atlas)
+func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner) {
+	node.Next.ProcessPaint(a, ev, runner)
 }
 
 type LifecycleNode struct {
 	BaseEventChainNode
 }
 
-func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	if glCtx, ok := ev.DrawContext.(gl.Context); ok {
+func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {
+	switch glCtx := ev.DrawContext.(type) {
+	case gl.Context:
 		runner.GL = glCtx
 		a.Send(paint.Event{})
 	}
-	node.Next.ProcessLifecycle(a, ev, runner, atlas)
+	node.Next.ProcessLifecycle(a, ev, runner)
 }
 
 type SizeNode struct {
 	BaseEventChainNode
 }
 
-func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessSize(a, ev, runner, atlas)
+func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner) {
+	runner.InitialContext.EdgeX = rune(ev.WidthPx / 4)
+	a.Send(paint.Event{})
+	node.Next.ProcessSize(a, ev, runner)
 }
 
 type TouchNode struct {
 	BaseEventChainNode
 }
 
-func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	node.Next.ProcessTouch(a, ev, runner, atlas)
+func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner) {
+	node.Next.ProcessTouch(a, ev, runner)
 }
 
 type PaintNode struct {
 	BaseEventChainNode
 }
 
-func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas) {
-	if runner.GL != nil {
+func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner) {
+	switch {
+	case runner.GL != nil:
 		OpenGLBackgroundAdapter{}.ClearTargetScreen(runner.GL, 255)
 		
 		ActiveScreenRow{
@@ -211,85 +196,155 @@ func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *Applicatio
 					NextRow:         EndOfScreenStream{},
 				},
 			},
-		}.RenderNextRow(runner.GL, atlas, runner.InitialContext)
+		}.RenderNextRow(runner.GL, runner.Atlas, runner.InitialContext)
 		
 		a.Publish()
 	}
-	node.Next.ProcessPaint(a, ev, runner, atlas)
+	node.Next.ProcessPaint(a, ev, runner)
 }
 
 type TerminalEventNode struct{}
 
-func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner, atlas StructuralAtlas) {}
-func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner, atlas StructuralAtlas)           {}
-func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
-func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner, atlas StructuralAtlas)          {}
+func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {}
+func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner)           {}
+func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner)          {}
+func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner)          {}
 
 // ============================================================================
-// ИСТИННЫЙ МАТРИЧНЫЙ РЕНДЕРЕР
+// ПАТТЕРН "ПОЛИМОРФНЫЙ ЗНАКОГЕНЕРАТОР" (АБСОЛЮТНО БЕЗ IF И SWITCH)
 // ============================================================================
 
-type GlyphDecorator interface {
-	RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune)
+type GlyphVector interface {
+	DrawVector(glCtx gl.Context, x, y, r, g, b rune)
 }
 
-type ActiveHardwareGlyphRenderer struct{}
+type VectorW struct{}
 
-func (ActiveHardwareGlyphRenderer) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
+func (VectorW) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
 	glCtx.Enable(gl.SCISSOR_TEST)
-	// ИСПРАВЛЕНО: Увеличена базовая пиксельная сетка вырезания (Scissor) до 32x32, 
-	// чтобы маркеры букв стали крупнее, четче и превратились в полноценные элементы UI.
-	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*32, int32(scale)*32)
 	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 12)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Scissor(int32(x+4)*4, int32(y)*4, 4, 24)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 	glCtx.Disable(gl.SCISSOR_TEST)
 }
 
+type VectorO struct{}
+
+func (VectorO) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 24)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.ClearColor(255.0/255.0, 255.0/255.0, 255.0/255.0, 1.0) // Вырезаем внутреннюю часть белым
+	glCtx.Scissor(int32(x+1)*4, int32(y+1)*4, 8, 16)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Disable(gl.SCISSOR_TEST)
+}
+
+type VectorK struct{}
+
+func (VectorK) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Scissor(int32(x+2)*4, int32(y+2)*4, 8, 4)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Disable(gl.SCISSOR_TEST)
+}
+
+type VectorI struct{}
+
+func (VectorI) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x+1)*4, int32(y)*4, 4, 24)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Disable(gl.SCISSOR_TEST)
+}
+
+type VectorN struct{}
+
+func (VectorN) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 16)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Scissor(int32(x)*4, int32(y+3)*4, 12, 4)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 16)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+	glCtx.Disable(gl.SCISSOR_TEST)
+}
+
+type VectorL struct{}
+
+func (VectorL) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
+	glCtx.Enable(gl.SCISSOR_TEST)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
+	glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 4)   glCtx.Clear(gl.COLOR_BUFFER_BIT)
+ glCtx.Disable(gl.SCISSOR_TEST)
+}
+
+type VectorY struct{}
+
+func (VectorY) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {glCtx.Enable(gl.SCISSOR_TEST)
+glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
+glCtx.Scissor(int32(x)*4, int32(y)*4, 12, 4)
+glCtx.Clear(gl.COLOR_BUFFER_BIT)
+glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 20)
+glCtx.Clear(gl.COLOR_BUFFER_BIT)
+glCtx.Disable(gl.SCISSOR_TEST)
+}
+
 type StructuralAtlas struct {
-	Chain GlyphDecorator
+ W, O, K, I, N, L, Y GlyphVector
 }
-
-type UIElementContainer interface {
-	DispatchTouch(pipe MobileEventChain, tx, ty rune)
-}
-
-// ============================================================================
-// ТОЧКА СБОРКИ И ЗАПУСКА: APPLICATIONRUNNER (ОБЪЕКТНЫЙ IOC КОНТЕЙНЕР)
-// ============================================================================
 
 type ApplicationRunner struct {
-	Atlas          StructuralAtlas
-	InitialContext UIContext
-	EventPipeline  MobileEventChain
-	Engine         ZeroFlowEngine
-	GL             gl.Context
+  Atlas   StructuralAtlasInitialContext
+  UIContextEventPipeline MobileEventChainEngine
+  ZeroFlowEngineGL  gl.Context
 }
 
 func (runner ApplicationRunner) Start(a app.App) {
-	for e := range a.Events() {
-		runner.Engine.DispatchSignal(a, e, runner.EventPipeline, &runner, runner.Atlas)
-	}
+ for e := range a.Events() {
+  runner.Engine.DispatchSignal(a, e, runner.EventPipeline, &runner)
+ }
 }
 
-func main()         {app.Main(ApplicationRunner{
-  Atlas: StructuralAtlas{
-   Chain: ActiveHardwareGlyphRenderer{},
-  },
-  InitialContext: UIContext{
-    EdgeX: 180,
-    CurrentY: 160, 
+func main()  {
+app.Main(ApplicationRunner{
+   Atlas: StructuralAtlas{
+    W: VectorW{},
+    O: VectorO{},
+    K: VectorK{},
+    I: VectorI{},
+    N: VectorN{},
+    L: VectorL{},
+    Y: VectorY{},
+   },
+   InitialContext: UIContext{
+    EdgeX:       180,
+    CurrentY:    160,
     ScreenHeightByte: 240,
-  },
-  Engine: ZeroFlowEngine{},
-  EventPipeline: LifecycleNode{
-  BaseEventChainNode: BaseEventChainNode{
-   Next: SizeNode{
+   },
+   Engine: ZeroFlowEngine{},
+   EventPipeline: LifecycleNode{
     BaseEventChainNode: BaseEventChainNode{
-     Next: TouchNode{
+     Next: SizeNode{
       BaseEventChainNode: BaseEventChainNode{
-       Next: PaintNode{
-BaseEventChainNode: BaseEventChainNode{
-         Next: TerminalEventNode{},
+       Next: TouchNode{
+        BaseEventChainNode: BaseEventChainNode{
+         Next: PaintNode{
+          BaseEventChainNode: BaseEventChainNode{
+           Next: TerminalEventNode{},
          },
         },
        },
