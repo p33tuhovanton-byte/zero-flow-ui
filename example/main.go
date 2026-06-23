@@ -272,12 +272,14 @@ func (runner ApplicationRunner) Start(a app.App) {
 }
 
 func main()         {app.Main(ApplicationRunner{
- Atlas: StructuralAtlas{
-  Chain: ActiveHardwareGlyphRenderer{},},
+  Atlas: StructuralAtlas{
+   Chain: ActiveHardwareGlyphRenderer{},
+  },
   InitialContext: UIContext{
     EdgeX: 180,
     CurrentY: 160, 
-    ScreenHeightByte: 240,},
+    ScreenHeightByte: 240,
+  },
   Engine: ZeroFlowEngine{},
   EventPipeline: LifecycleNode{
   BaseEventChainNode: BaseEventChainNode{
