@@ -271,3 +271,4 @@ func (runner ApplicationRunner) Start(a app.App) {
 	}
 }
 
+func main()     {app.Main(ApplicationRunner{Atlas: StructuralAtlas{Chain: ActiveHardwareGlyphRenderer{},},InitialContext: UIContext{EdgeX:            180, // Оптимизировано положение под экраны современных смартфоновCurrentY:         160, // Смещено выше, чтобы интерфейс не перекрывался системным баромScreenHeightByte: 240,},Engine: ZeroFlowEngine{},EventPipeline: LifecycleNode{BaseEventChainNode: BaseEventChainNode{Next: SizeNode{BaseEventChainNode: BaseEventChainNode{Next: TouchNode{BaseEventChainNode: BaseEventChainNode{Next: PaintNode{BaseEventChainNode: BaseEventChainNode{Next: TerminalEventNode{},},},},},},},},},}.Start)}
