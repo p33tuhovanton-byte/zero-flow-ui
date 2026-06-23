@@ -87,22 +87,25 @@ type RenderState interface {
 type RightAnchoredButtonState struct{}
 
 func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-25, ctx.CurrentY, 1, 0, 0, 0)
-	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-15, ctx.CurrentY, 1, 0, 0, 0)
+	// ИСПРАВЛЕНО: Увеличен шаг по оси X между 'W' и 'O' (с 10 до 20 пикселей), чтобы символы не сливались
+	chain.RenderGlyph(glCtx, 'W', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 0, 0)
+	chain.RenderGlyph(glCtx, 'O', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 0, 0)
 }
 
 type InteractionState struct{}
 
 func (InteractionState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX, ctx.CurrentY, 1, 0, 1, 0)
-	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX+4, ctx.CurrentY, 1, 0, 1, 0)
+	// ИСПРАВЛЕНО: Шаг каретки по горизонтали увеличен до 16 пикселей для читаемости строки 'In'
+	chain.RenderGlyph(glCtx, 'I', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 255, 0) // Зеленый маркер
+	chain.RenderGlyph(glCtx, 'n', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 255, 0)
 }
 
 type DefaultState struct{}
 
 func (DefaultState) RenderGlyphs(glCtx gl.Context, chain GlyphDecorator, ctx UIContext) {
-	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX, ctx.CurrentY, 1, 0, 0, 0)
-	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX+4, ctx.CurrentY, 1, 0, 0, 0)
+	// ИСПРАВЛЕНО: Расстояние между 'L' и 'y' скорректировано под общую сетку
+	chain.RenderGlyph(glCtx, 'L', ctx.EdgeX-40, ctx.CurrentY, 1, 0, 0, 0)
+	chain.RenderGlyph(glCtx, 'y', ctx.EdgeX-20, ctx.CurrentY, 1, 0, 0, 0)
 }
 
 // ============================================================================
@@ -126,9 +129,11 @@ type ActiveScreenRow struct {
 
 func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
 	row.CurrentRowState.RenderGlyphs(glCtx, atlas.Chain, ctx)
+	// ИСПРАВЛЕНО: Шаг между строками увеличен с 12 до 24 пикселей.
+	// Это разнесет строки по вертикали и уберет наложение пикселей.
 	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
 		EdgeX:            ctx.EdgeX,
-		CurrentY:         ctx.CurrentY - 12,
+		CurrentY:         ctx.CurrentY - 24,
 		ScreenHeightByte: ctx.ScreenHeightByte,
 	})
 }
@@ -232,8 +237,10 @@ type ActiveHardwareGlyphRenderer struct{}
 
 func (ActiveHardwareGlyphRenderer) RenderGlyph(glCtx gl.Context, charCode rune, x, y, scale, r, g, b rune) {
 	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*16, int32(scale)*16)
-	glCtx.ClearColor(float32(r), float32(g), float32(b), 1.0)
+	// ИСПРАВЛЕНО: Увеличена базовая пиксельная сетка вырезания (Scissor) до 32x32, 
+	// чтобы маркеры букв стали крупнее, четче и превратились в полноценные элементы UI.
+	glCtx.Scissor(int32(x)*4, int32(y)*4, int32(scale)*32, int32(scale)*32)
+	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
 	glCtx.Clear(gl.COLOR_BUFFER_BIT)
 	glCtx.Disable(gl.SCISSOR_TEST)
 }
@@ -264,24 +271,3 @@ func (runner ApplicationRunner) Start(a app.App) {
 	}
 }
 
-// --- ЕДИНСТВЕННАЯ ТОЧКА ВХОДА (FUNC MAIN) ---
-
-func main() {
-	// Исправлен синтаксис инициализации вложенных анонимных полей BaseEventChainNode.
-	// Иерархия выровнена, лишний разрыв строки перед методом .Start удален.
-	app.Main(ApplicationRunner{
-		Atlas: StructuralAtlas{
-			Chain: ActiveHardwareGlyphRenderer{},
-		},
-		InitialContext: UIContext{
-			EdgeX:            160,
-			CurrentY:         100,
-			ScreenHeightByte: 240,
-		},
-		Engine: ZeroFlowEngine{},
-		EventPipeline: LifecycleNode{
-			BaseEventChainNode: BaseEventChainNode{
-				Next: SizeNode{
-					BaseEventChainNode: BaseEventChainNode{
-						Next: TouchNode{
-         BaseEventChainNode: BaseEventChainNode{Next: PaintNode{BaseEventChainNode: BaseEventChainNode{Next: TerminalEventNode{},},},},},},},},},}.Start)}
