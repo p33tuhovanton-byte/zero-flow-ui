@@ -1,30 +1,31 @@
 package main
 
+// WavefrontIntersectionAcceptor используется для обработки проекции куба
 type WavefrontIntersectionAcceptor struct {
 	ResultTarget   UniversalContainer[Bool]
 	ProjectedPoint Vector2D
 }
-func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
+func (wia WavefrontIntersectionAcceptor) AcceptProjection() { 
+	wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() 
+}
 
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
+	// Длинная цепочка Next Пеано выстроена в линию, безопасную для go fmt
 	cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 	cubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 
-	uContainer := UniversalContainer[Number]{}
-	wos.X.Differentiate()
-	isAfterStart := uContainer.Value.CompareWithZero()
+	container := UniversalContainer[Bool]{Value: False{}}
 	
-	finalContainer := UniversalContainer[Bool]{Value: False{}}
-	BranchFactory{
-		Condition: isAfterStart,
-		TrueBranch: DirectAction[Bool]{Target: finalContainer, Result: isAfterStart},
-		FalseBranch: DirectAction[Bool]{Target: finalContainer, Result: False{}},
+	// Вычисляем границы 3D куба Пеано полностью через полиморфную дифференциальную цепочку
+	container.Value = BranchFactory{
+		Condition: wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero(),
+		TrueBranch: DirectAction[Bool]{Target: UniversalContainer[Bool]{}, Result: cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()},
+		FalseBranch: DirectAction[Bool]{Target: UniversalContainer[Bool]{}, Result: False{}},
 	}.Create()
 	
 	wos.ProjMethod.InjectContinuation()
 	wos.ProjMethod.Project()
-	
-	return finalContainer.Value
+	return container.Value
 }
 
 type ScanAction struct{ Scanner CanvasScanner }
@@ -36,7 +37,7 @@ func (sa StopAction) IdentifyClass() {}
 func (sa StopAction) Execute()       {}
 
 // ============================================================================
-// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Идеальные пустые сигнатуры методов)
+// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Чистые пустые сигнатуры методов)
 // ============================================================================
 
 type Snapshot[T Object] interface {
