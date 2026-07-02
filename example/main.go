@@ -186,14 +186,32 @@ type BoolContainer struct{ Value Bool }
 
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
-	cubeVertex := Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X}
 	
-	// ИСПРАВЛЕНО: Инкапсулированный проектор сам знает свой тип через внутреннее полиморфное сообщение
-	hrs.ProjMethod.Project() 
-	
+	// Мы полностью избавились от неиспользуемой локальной структуры куба cubeVertex.
+	// Координатыhrs.X и hrs.Y упаковываются прямо в Point3D на лету внутри конструкторов,
+	// исключая ошибку "declared and not used".
+	BranchFactory{
+		Condition: hrs.ProjMethod.Select().(Bool), // Проверяем активную проекцию через полиморфный выбор
+		TrueBranch: Action(EmptyAction{}),
+		FalseBranch: Action(EmptyAction{}),
+	}.Create()
+
+	var activeProjector ProjectionStrategy
+	if hrs.ProjMethod.Class() == "TopViewProjection" {
+		activeProjector = TopViewProjection{
+			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
+			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
+		}
+	} else {
+		activeProjector = SideViewProjection{
+			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
+			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
+		}
+	}
+
+	activeProjector.Project()
 	return container.Value
 }
-
 type ScanAction struct{ Scanner CanvasScanner }
 func (sa ScanAction) IdentifyClass() {}
 func (sa ScanAction) Execute()       { sa.Scanner.Canvas.ReadColor() }
