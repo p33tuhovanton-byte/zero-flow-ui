@@ -13,8 +13,18 @@ type CameraStateHolder struct {
 	CurrentProjection ProjectionStrategy
 }
 
+type SystemEvent interface {
+	Object
+	NotifyDispatcher()
+}
+
+// ============================================================================
+// НАВЕДЕНИЕ ВЕЧНОГО РЕАКТИВНОГО АВТОМАТА (Изолированная граница сред)
+// ============================================================================
+
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
+
 	app.Main(func(a app.App) {
 		runLifecycleLoop(a.Events(), holder, nil, Zero{}, Zero{})
 	})
@@ -44,13 +54,23 @@ func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Conte
 		runLifecycleLoop(events, holder, ctx, w, h)
 		return
 	}
-	evPaint, okPaint := raw.(paint.Event)
+	
+	// ИСПРАВЛЕНО: evPaint полностью удален, оставлен только чистый логический флаг okPaint.
+	// Это исключает ошибку "declared and not used" на этапе компиляции NDK.
+	_, okPaint := raw.(paint.Event)
 	if okPaint {
 		AppLifecycleLoop{StateHolder: holder, GLContext: ctx, WidthNum: w, HeightNum: h}.DispatchPaint()
 		runLifecycleLoop(events, holder, ctx, w, h)
 		return
 	}
 	runLifecycleLoop(events, holder, ctx, w, h)
+}
+
+func intToPeano(n int, current Number) Number {
+	if n <= 0 {
+		return current
+	}
+	return intToPeano(n-1, Successor{pred: current})
 }
 
 type AppLifecycleLoop struct {
@@ -96,8 +116,6 @@ func (ngre NativeGameRenderEvent) Trigger() {
 	ngre.GL.ClearColor(1.0, 1.0, 1.0, 1.0)
 	ngre.GL.Clear(gl.COLOR_BUFFER_BIT)
 
-	// Инициализируем дифференциальный волновой сканер. 
-	// Шаг DirectionDelta равен единичному Successor, но будет динамически сжиматься в фокусе.
 	CanvasScanner{
 		Step:    WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection, DirectionDelta: Zero{}.Next()},
 		Canvas:  OpenGlCanvas{GlContext: ngre.GL},
@@ -175,8 +193,6 @@ type Vector interface {
 	IsIntersecting3D() Bool
 }
 
-// WavefrontOrientedStrategy — Волновой дифференциальный ориентированный сканер.
-// Движение идет непрерывным фронтом, замедляясь посередине и ближе к правому нижнему углу кадра.
 type WavefrontOrientedStrategy struct {
 	X              Number
 	Y              Number
@@ -192,18 +208,11 @@ type VectorContainer struct{ Value Vector }
 
 func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 	container := &VectorContainer{}
-	
-	// Вычисляем порог (threshold) центра/правого края через вложенность Пеано кадра
 	midThreshold := Zero{}.Next().Next().Next().Next().Next()
 
-	// ДИФФЕРЕНЦИАЛЬНАЯ ПЕРЕОРИЕНТАЦИЯ: Объект числа сам вычисляет, 
-	// находимся ли мы посередине или ближе к правому углу.
-	// Если да — шаг DirectionDelta сжимается, уплотняя скан. Иначе — летит широкой волной.
 	BranchFactory{
 		Condition: wos.X.EvaluateWaveCenter(wos.MaxX, midThreshold),
-		// True Ветка: Мы посередине или справа! Сжимаем шаг до высокоточного скана
 		TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
-		// False Ветка: Далекая периферия. Продвигаем волновой фронт с широким прыжком
 		FalseBranch: BranchFactory{
 			Condition:  Zero{CompareTarget: wos.X.Next()}.CheckEquality(),
 			TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: Zero{}, Y: wos.Y.Next(), MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
