@@ -46,11 +46,14 @@ type Number interface {
 	EvaluateGridStep(currentStep Number) Bool
 	Differentiate(other Number, accumulator Number) Number
 	EvaluateWaveCenter(maxX Number, threshold Number) Bool
-	// CPS-метод накопления аппаратного индекса без примитивов и return
-	AccumulateHardwareCoordinate(driver HardwareIntegerDriver)
+	// ИСПРАВЛЕНО: Сигнатура идеально пустая (). Драйвер вшит внутрь числа при вызове.
+	AccumulateHardwareCoordinate()
 }
 
-type Zero struct{ CompareTarget Number }
+type Zero struct {
+	CompareTarget Number
+	ActiveDriver  HardwareIntegerDriver // Инкапсулированный драйвер GPU
+}
 
 func (z Zero) IdentifyClass()       {}
 func (z Zero) Class() string        { return "Zero" }
@@ -62,14 +65,14 @@ func (z Zero) IsMultipleOfGrid() Bool { return True{TrueBranch: EmptyAction{}, F
 func (z Zero) EvaluateGridStep(currentStep Number) Bool { return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
 func (z Zero) Differentiate(other Number, accumulator Number) Number { return accumulator }
 func (z Zero) EvaluateWaveCenter(maxX Number, threshold Number) Bool { return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
-func (z Zero) AccumulateHardwareCoordinate(driver HardwareIntegerDriver) {
-	// Ноль завершает накопление импульса, триггеря отправку в GPU
-	driver.ExecuteHardwarePulse()
+func (z Zero) AccumulateHardwareCoordinate() {
+	z.ActiveDriver.ExecuteHardwarePulse()
 }
 
 type Successor struct {
 	pred          Number
 	CompareTarget Number
+	ActiveDriver  HardwareIntegerDriver
 }
 
 func (s Successor) IdentifyClass()       {}
@@ -124,9 +127,21 @@ func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
 	return container.Value
 }
 
-func (s Successor) AccumulateHardwareCoordinate(driver HardwareIntegerDriver) {
-	// Инкрементируем нативный счетчик внутри драйвера и бежим дальше по цепочке Пеано
-	s.pred.AccumulateHardwareCoordinate(driver.IncrementPulse())
+func (s Successor) AccumulateHardwareCoordinate() {
+	// Подмешиваем импульс в драйвер и каскадно проталкиваем рекурсию вперед
+	nextDriver := s.ActiveDriver.IncrementPulse()
+	
+	// Конструируем следующий шаг Пеано с инкапсулированным обновленным драйвером
+	nextState := s.pred
+	if node, ok := nextState.(Successor); ok {
+		node.ActiveDriver = nextDriver
+		nextState = node
+	} else if empty, ok := nextState.(Zero); ok {
+		empty.ActiveDriver = nextDriver
+		nextState = empty
+	}
+	
+	nextState.AccumulateHardwareCoordinate()
 }
 
 type HardwareIntegerDriver interface {
@@ -156,14 +171,4 @@ type BranchFactory struct {
 func (bf BranchFactory) Create() Bool {
 	bf.Condition.Select().Execute()
 	return bf.Condition
-}
-
-type TypeResolver struct {
-	ClassName string
-	T, F      Action
-	Target    *UniversalContainer[Bool]
-}
-
-func (tr TypeResolver) Resolve() {
-	tr.Target.Value = True{TrueBranch: tr.T, FalseBranch: tr.F}
 }
