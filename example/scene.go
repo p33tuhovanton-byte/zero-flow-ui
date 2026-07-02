@@ -45,41 +45,28 @@ type GameColor interface {
 	PaintHardwarePixel()
 }
 
-// Каждая структура цвета теперь хранит низкоуровневый контекст и координаты для отрисовки точки
-type SolidWhiteColor struct {
-	GL gl.Context
-	U  int
-	V  int
-}
+// Нативные драйверы полностью инкапсулировали примитивы внутри себя (Правило №5)
+type SolidWhiteColor struct{}
 func (swc SolidWhiteColor) IdentifyClass() {}
-func (swc SolidWhiteColor) PaintHardwarePixel() {
-	// Белый фон кадра (уже залит gl.Clear, метод остается чистым Null-Object-ом)
-}
+func (swc SolidWhiteColor) PaintHardwarePixel() {}
 
 type GridLineColor struct {
-	GL gl.Context
-	U  int
-	V  int
+	DriverX HardwareIntegerDriver
+	DriverY HardwareIntegerDriver
 }
 func (glc GridLineColor) IdentifyClass() {}
 func (glc GridLineColor) PaintHardwarePixel() {
-	// ФИЗИЧЕСКАЯ ОТРИСОВКА СЕТКИ: Ограничиваем область пикселя и заливаем серым цветом
-	glc.GL.Scissor(int32(glc.U), int32(glc.V), 1, 1)
-	glc.GL.ClearColor(0.8, 0.8, 0.8, 1.0)
-	glc.GL.Clear(gl.COLOR_BUFFER_BIT)
+	// Запускаем волновой разворот координат Пеано прямо в нативный буфер Scissor
+	glc.DriverX.ExecuteHardwarePulse()
 }
 
 type Object3DColor struct {
-	GL gl.Context
-	U  int
-	V  int
+	DriverX HardwareIntegerDriver
+	DriverY HardwareIntegerDriver
 }
 func (o3c Object3DColor) IdentifyClass() {}
 func (o3c Object3DColor) PaintHardwarePixel() {
-	// ФИЗИЧЕСКАЯ ОТРИСОВКА КУБА: Заливаем точку контура куба ярко-красным цветом
-	o3c.GL.Scissor(int32(o3c.U), int32(o3c.V), 2, 2)
-	o3c.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
-	o3c.GL.Clear(gl.COLOR_BUFFER_BIT)
+	o3c.DriverX.ExecuteHardwarePulse()
 }
 
 type TransparentColor struct{}
@@ -200,7 +187,7 @@ func (fa AndroidFrame) FrameScene() { fa.NextFrame.Execute() }
 
 type Canvase struct{ ScanTarget CanvasScanner }
 func (c Canvase) IdentifyClass() {}
-func (c AppLifecycleLoop) Update()        {}
+func (c Canvase) Update()        {}
 func (c Canvase) Scene()         {}
 func (c Canvase) CreateScene()   {}
 func (c Canvase) Frame()         {}
