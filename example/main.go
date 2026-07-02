@@ -5,135 +5,101 @@ import (
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
+	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
+
+  "core"
+  "scene"
 )
 
-// ============================================================================
-// КОРНЕВЫЕ КОНТРАКТЫ И КОМАНДЫ (Абсолютно чистые сигнатуры)
-// ============================================================================
-
-type Object interface {
-	Class() string
-}
-
-type Action interface {
-	Object
-	Execute()
-}
-
-type Bool interface {
-	Object
-	Select() Action
-}
-
-type EmptyAction struct{}
-func (ea EmptyAction) Class() string { return "EmptyAction" }
-func (ea EmptyAction) Execute()      {}
-
-// ============================================================================
-// СИСТЕМНАЯ ГРАНИЦА (Исправленный под Gomobile Lifecycle цикл)
-// ============================================================================
+type CameraStateHolder struct{ CurrentProjection ProjectionStrategy }
 
 func main() {
-	// Инфраструктурный цикл Gomobile. Вынужден использовать процедурный for-range,
-	// так как это внешний системный канал операционной системы Android.
+	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 	app.Main(func(a app.App) {
 		var glCtx gl.Context
 		var screenWidth, screenHeight int
-
 		for e := range a.Events() {
 			switch e := a.Filter(e).(type) {
 			case lifecycle.Event:
-				// Исправлено: контекст извлекается из событий жизненного цикла
 				glCtx, _ = e.DrawContext.(gl.Context)
 			case size.Event:
-				screenWidth = e.WidthPx
-				screenHeight = e.HeightPx
-			case paint.Event:
-				if glCtx == nil {
-					continue
+				screenWidth, screenHeight = e.WidthPx, e.HeightPx
+			case touch.Event:
+				if e.Type == touch.TypeBegin {
+					TouchPulseEvent{StateHolder: holder}.Trigger()
 				}
-
-				// Мгновенный побег из процедурного мира Gomobile в мир Чистого ООП.
-				// Передаем управление игровому событию кадра.
-				NativeGameRenderEvent{
-					GL:     glCtx,
-					Width:  intToPeano(screenWidth, Zero{}),
-					Height: intToPeano(screenHeight, Zero{}),
-				}.Trigger()
-
+			case paint.Event:
+				if glCtx == nil { continue }
+				InitPeanoFactory{LimitX: screenWidth, LimitY: screenHeight, OnReady: GameLauncherAcceptor{GL: glCtx, Holder: holder}}.StartBuild()
 				a.Publish()
 			}
 		}
 	})
 }
 
-// Рекурсивный генератор Чисел Пеано на стыке сред (до входа в ООП)
-func intToPeano(n int, current Number) Number {
-	if n <= 0 {
-		return current
+type InitPeanoFactory struct {
+	LimitX, LimitY int
+	Current, SavedX Number
+	OnReady         GameLauncherAcceptor
+}
+func (ipf InitPeanoFactory) StartBuild() { ipf.BuildX() }
+func (ipf InitPeanoFactory) BuildX() {
+	if ipf.LimitX <= 0 {
+		InitPeanoFactory{LimitY: ipf.LimitY, Current: Zero{}, SavedX: ipf.Current, OnReady: ipf.OnReady}.BuildY()
+		return
 	}
-	return intToPeano(n-1, Successor{pred: current})
+	InitPeanoFactory{LimitX: ipf.LimitX - 1, LimitY: ipf.LimitY, Current: Successor{pred: ipf.Current}, OnReady: ipf.OnReady}.BuildX()
+}
+func (ipf InitPeanoFactory) BuildY() {
+	if ipf.LimitY <= 0 {
+		ipf.OnReady.Launch(ipf.SavedX, ipf.Current)
+		return
+	}
+	InitPeanoFactory{LimitY: ipf.LimitY - 1, Current: Successor{pred: ipf.Current}, SavedX: ipf.SavedX, OnReady: ipf.OnReady}.BuildY()
 }
 
-// ============================================================================
-// ИГРОВОЙ CANVAS И ХОЛСТ ВИДЕОКАРТЫ (OpenGL ES)
-// ============================================================================
+type GameLauncherAcceptor struct {
+	GL     gl.Context
+	Holder *CameraStateHolder
+}
+func (gla GameLauncherAcceptor) Launch(w Number, h Number) {
+	NativeGameRenderEvent{GL: gla.GL, Width: w, Height: h, Projection: gla.Holder.CurrentProjection}.Trigger()
+}
+
+type TouchPulseEvent struct{ StateHolder *CameraStateHolder }
+func (tpe TouchPulseEvent) IdentifyClass(consumer ClassConsumer) {}
+func (tpe TouchPulseEvent) Trigger() { tpe.StateHolder.CurrentProjection = tpe.StateHolder.CurrentProjection.NextOrientation() }
 
 type Canvas interface {
 	Object
-	ReadColor() GameColor
+	ReadColor() Action
 }
 
 type NativeGameRenderEvent struct {
-	GL     gl.Context
-	Width  Number
-	Height Number
+	GL         gl.Context
+	Width      Number
+	Height     Number
+	Projection ProjectionStrategy
 }
-
-func (ngre NativeGameRenderEvent) Class() string { return "NativeGameRenderEvent" }
-
+func (ngre NativeGameRenderEvent) IdentifyClass(consumer ClassConsumer) {}
 func (ngre NativeGameRenderEvent) Trigger() {
-	// Отрисовка кадра и его мгновенный точечный скан без переменных.
-	// Конструируем стартовое состояние Игрового Цикла.
 	CanvasScanner{
-		Step: HorizontalRowStrategy{
-			X:    Zero{},
-			Y:    Zero{},
-			MaxX: ngre.Width,
-			MaxY: ngre.Height,
-		},
-		Canvas: OpenGlCanvas{
-			GlContext: ngre.GL,
-		},
+		Step: HorizontalRowStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection},
+		Canvas: OpenGlCanvas{GlContext: ngre.GL},
 		Storage: EmptySnapshot[GameColor]{},
 	}.Scan()
 }
 
 type OpenGlCanvas struct {
-	GlContext gl.Context // Инкапсулированный контекст GPU
+	GlContext gl.Context
+	Scene     Composited3DScene
 }
-
-func (ogc OpenGlCanvas) Class() string { return "OpenGlCanvas" }
-
-func (ogc OpenGlCanvas) ReadColor() GameColor {
-	// Сигнатура пустая. Метод лениво считывает 1 конкретный пиксель из памяти GPU
-	// с помощью gl.ReadPixels. Координаты вшиты в стейт вектора при вызове Scan.
-	return HardwareGlColor{Id: "GPU_Color_RGBA"}
+func (ogc OpenGlCanvas) IdentifyClass(consumer ClassConsumer) {}
+func (ogc OpenGlCanvas) ReadColor() Action {
+	ogc.Scene.RenderPixel()
+	return EmptyAction{}
 }
-
-type GameColor interface {
-	Object
-}
-
-type HardwareGlColor struct {
-	Id string
-}
-func (hgc HardwareGlColor) Class() string { return hgc.Id }
-
-// ============================================================================
-// БЕЗПЕРЕМЕННЫЙ ИГРОВОЙ СКАНЕР (CPS Поток кадра)
-// ============================================================================
 
 type Scanner interface {
 	Object
@@ -145,193 +111,119 @@ type CanvasScanner struct {
 	Canvas  Canvas
 	Storage Snapshot[GameColor]
 }
+func (cs CanvasScanner) IdentifyClass(consumer ClassConsumer) {}
 
-func (cs CanvasScanner) Class() string { return "CanvasScanner" }
-
-func (cs CanvasScanner) Scan() {
-	// Полный отказ от переменных, условий if и return.
-	BranchFactory{
-		Condition: cs.Step.IsCanvasFinished(),
-
-		// Конец кадра: Полный снимок игры зафиксирован точками в Snapshot
-		TrueBranch: StopAction{
-			FinalSnapshot: NodeSnapshot[GameColor]{
-				tail: cs.Storage,
-				NewPoint: SnapshotPoint[GameColor]{
-					VectorState: cs.Step,
-					Color:       cs.Canvas.ReadColor(),
-				},
-			}.Accumulate(),
-		},
-
-		// Процесс: Шагаем к следующей точке экрана по вектору памяти
-		FalseBranch: ScanAction{
-			Scanner: CanvasScanner{
-				Step:   cs.Step.Advance(),
-				Canvas: cs.Canvas,
-				Storage: NodeSnapshot[GameColor]{
-					tail: cs.Storage,
-					NewPoint: SnapshotPoint[GameColor]{
-						VectorState: cs.Step,
-						Color:       cs.Canvas.ReadColor(),
-					},
-				}.Accumulate(),
-			},
-		},
-	}.Create().Select().Execute()
+type PixelSaveAcceptor struct {
+	Scanner       CanvasScanner
+	UpdatedCanvas OpenGlCanvas
 }
-
-// ============================================================================
-// ТРАЕКТОРИЯ СКАНА (Горизонтальное кэш-ориентированное выравнивание)
-// ============================================================================
+func (psa PixelSaveAcceptor) AcceptColor(color GameColor) {
+	CanvasScanner{
+		Step: psa.Scanner.Step.AdvanceVector(),
+		Canvas: psa.UpdatedCanvas,
+		Storage: NodeSnapshot[GameColor]{tail: psa.Scanner.Storage, NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: color}}.Accumulate(),
+	}.Scan()
+}
+func (cs CanvasScanner) Scan() {
+	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
+	scene := Composited3DScene{
+		Background: WhiteBackgroundLayer{Output: saveAcceptor},
+		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
+		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: saveAcceptor},
+		FinalOutput: saveAcceptor,
+	}
+	saveAcceptor.UpdatedCanvas.Scene = scene
+	BranchFactory{Condition: cs.Step.IsCanvasFinished(), TrueBranch: StopAction{FinalSnapshot: cs.Storage}, FalseBranch: ScanAction{Scanner: cs}}.Create().Select().Execute()
+}
 
 type Vector interface {
 	Object
-	Advance() Vector
+	AdvanceVector() Vector
 	IsCanvasFinished() Bool
+	IsGridIntersection() Bool
+	IsIntersecting3D() Bool
 }
 
 type HorizontalRowStrategy struct {
-	X    Number
-	Y    Number
-	MaxX Number
-	MaxY Number
+	X          Number
+	Y          Number
+	MaxX       Number
+	MaxY       Number
+	ProjMethod ProjectionStrategy
 }
+func (hrs HorizontalRowStrategy) IdentifyClass(consumer ClassConsumer) {}
 
-func (hrs HorizontalRowStrategy) Class() string { return "HorizontalRowStrategy" }
+type VectorContainer struct{ Value Vector }
 
-func (hrs HorizontalRowStrategy) Advance() Vector {
-	return BranchFactory{
+func (hrs HorizontalRowStrategy) AdvanceVector() Vector {
+	container := &VectorContainer{}
+	BranchFactory{
 		Condition: Zero{CompareTarget: hrs.X.Next()}.CheckEquality(),
-		// Край строки: Перенос каретки влево (Zero) и сдвиг вниз (Y.Next)
-		TrueBranch: VectorAction{
-			Result: HorizontalRowStrategy{
-				X:    Zero{},
-				Y:    hrs.Y.Next(),
-				MaxX: hrs.MaxX,
-				MaxY: hrs.MaxY,
-			},
-		},
-		// Движение по горизонтали: Сдвиг вправо (X.Next)
-		FalseBranch: VectorAction{
-			Result: HorizontalRowStrategy{
-				X:    hrs.X.Next(),
-				Y:    hrs.Y,
-				MaxX: hrs.MaxX,
-				MaxY: hrs.MaxY,
-			},
-		},
-	}.Create().Select().(VectorAction).Result
+		TrueBranch: DirectVectorAction{Target: container, Result: HorizontalRowStrategy{X: Zero{}, Y: hrs.Y.Next(), MaxX: hrs.MaxX, MaxY: hrs.MaxY, ProjMethod: hrs.ProjMethod}},
+		FalseBranch: DirectVectorAction{Target: container, Result: HorizontalRowStrategy{X: hrs.X.Next(), Y: hrs.Y, MaxX: hrs.MaxX, MaxY: hrs.MaxY, ProjMethod: hrs.ProjMethod}},
+	}.Create().Select().Execute()
+	return container.Value
 }
 
-func (hrs HorizontalRowStrategy) IsCanvasFinished() Bool {
-	return Zero{CompareTarget: hrs.Y}.CheckEquality()
+type DirectVectorAction struct {
+	Target *VectorContainer
+	Result Vector
+}
+func (dva DirectVectorAction) IdentifyClass(consumer ClassConsumer) {}
+func (dva DirectVectorAction) Execute()                             { dva.Target.Value = dva.Result }
+
+func (hrs HorizontalRowStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: hrs.Y}.CheckEquality() }
+func (hrs HorizontalRowStrategy) IsGridIntersection() Bool { return hrs.X.IsMultipleOfGrid() }
+
+type CubeIntersectionAcceptor struct {
+	ScannerCoords HorizontalRowStrategy
+	ResultTarget  *BoolContainer
+}
+func (cia CubeIntersectionAcceptor) AcceptProjection(vector Vector2D) { cia.ResultTarget.Value = vector.U.CheckEquality() }
+
+type BoolContainer struct{ Value Bool }
+
+func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
+	container := &BoolContainer{Value: False{}}
+	cubeVertex := Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X}
+	var activeProjector ProjectionStrategy
+	if hrs.ProjMethod.Class() == "TopViewProjection" {
+		activeProjector = TopViewProjection{Vertex: cubeVertex, Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container}}
+	} else {
+		activeProjector = SideViewProjection{Vertex: cubeVertex, Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container}}
+	}
+	activeProjector.Project()
+	return container.Value
 }
 
-type VectorAction struct{ Result Vector }
-func (va VectorAction) Class() string { return "VectorAction" }
-func (va VectorAction) Execute()      {}
+type ScanAction struct{ Scanner CanvasScanner }
+func (sa ScanAction) IdentifyClass(consumer ClassConsumer) {}
+func (sa ScanAction) Execute()                             { sa.Scanner.Canvas.ReadColor() }
 
-// ============================================================================
-// ПОЛИМОРФНАЯ СНИМОК-КОЛЛЕКЦИЯ (Вместо слайсов)
-// ============================================================================
-
-type Point[T Object] interface {
-	Object
-}
-
-type SnapshotPoint[T Object] struct {
-	VectorState Vector
-	Color       T
-}
-func (sp SnapshotPoint[T]) Class() string { return "SnapshotPoint" }
+type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
+func (sa StopAction) IdentifyClass(consumer ClassConsumer) {}
+func (sa StopAction) Execute()                             {}
 
 type Snapshot[T Object] interface {
 	Object
 	Accumulate() Snapshot[T]
 }
 
-type EmptySnapshot[T Object] struct {
-	NewPoint Point[T]
-}
-func (es EmptySnapshot[T]) Class() string { return "EmptySnapshot" }
-func (es EmptySnapshot[T]) Accumulate() Snapshot[T] {
-	return NodeSnapshot[T]{head: es.NewPoint, tail: es}
-}
+type EmptySnapshot[T Object] struct{ NewPoint Point[T] }
+func (es EmptySnapshot[T]) IdentifyClass(consumer ClassConsumer) {}
+func (es EmptySnapshot[T]) Accumulate() Snapshot[T]             { return NodeSnapshot[T]{head: es.NewPoint, tail: es} }
 
 type NodeSnapshot[T Object] struct {
 	head     Point[T]
 	tail     Snapshot[T]
 	NewPoint Point[T]
 }
-func (ns NodeSnapshot[T]) Class() string { return "NodeSnapshot" }
-func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] {
-	return NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
+func (ns NodeSnapshot[T]) IdentifyClass(consumer ClassConsumer) {}
+func (ns NodeSnapshot[T]) Accumulate() Snapshot[T]             { return NodeSnapshot[T]{head: ns.NewPoint, tail: ns} }
+
+type Point[T Object] interface{ Object }
+type SnapshotPoint[T Object] struct {
+	VectorState Vector
+	Color       T
 }
-
-// ============================================================================
-// ПОЛИМОРФНАЯ МАТЕМАТИКА ПЕАНО
-// ============================================================================
-
-type Number interface {
-	Object
-	Next() Number
-	CheckEquality() Bool
-	CompareWithZero() Bool
-	CompareWithSuccessor() Bool
-}
-
-type Zero struct{ CompareTarget Number }
-func (z Zero) Class() string       { return "Zero" }
-func (z Zero) Next() Number        { return Successor{pred: z} }
-func (z Zero) CheckEquality() Bool { return z.CompareTarget.CompareWithZero() }
-func (z Zero) CompareWithZero() Bool {
-	return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
-}
-func (z Zero) CompareWithSuccessor() Bool {
-	return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
-}
-
-type Successor struct{ pred, CompareTarget Number }
-func (s Successor) Class() string       { return "Successor" }
-func (s Successor) Next() Number        { return Successor{pred: s} }
-func (s Successor) CheckEquality() Bool { return s.CompareTarget.CompareWithSuccessor() }
-func (s Successor) CompareWithZero() Bool {
-	return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
-}
-func (s Successor) CompareWithSuccessor() Bool {
-	return Successor{pred: s.pred, CompareTarget: s.CompareTarget.(Successor).pred}.CheckEquality()
-}
-
-// ============================================================================
-// ОБЪЕКТНОЕ УПРАВЛЕНИЕ ПОТОКОМ (Исправлен тернарный синтаксис на резолвер типов)
-// ============================================================================
-
-type True struct{ TrueBranch, FalseBranch Action }
-func (t True) Class() string   { return "True" }
-func (t True) Select() Action { return t.TrueBranch }
-
-type False struct{ TrueBranch, FalseBranch Action }
-func (f False) Class() string   { return "False" }
-func (f False) Select() Action { return f.FalseBranch }
-
-type BranchFactory struct{ Condition Bool; TrueBranch, FalseBranch Action }
-func (bf BranchFactory) Create() Bool {
-	return TypeResolver{ClassName: bf.Condition.Class(), T: bf.TrueBranch, F: bf.FalseBranch}.Resolve()
-}
-
-type TypeResolver struct{ ClassName string; T, F Action }
-func (tr TypeResolver) Resolve() Bool { 
-	// Чистое полиморфное распределение без незаконного тернарного оператора
-	return True{TrueBranch: tr.T, FalseBranch: tr.F} 
-}
-
-type ScanAction struct{ Scanner Scanner }
-func (sa ScanAction) Class() string { return "ScanAction" }
-func (sa ScanAction) Execute()      { sa.Scanner.Scan() }
-
-type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
-func (sa StopAction) Class() string { return "StopAction" }
-func (sa StopAction) Execute() {
-	// Кадр игры успешно считан в иммутабельную структуру Snapshot без нарушения манифеста.
-}
+func (sp SnapshotPoint[T]) IdentifyClass(consumer ClassConsumer) {}
