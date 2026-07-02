@@ -1,4 +1,25 @@
-package main
+func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
+	container := &BoolContainer{Value: False{}}
+	
+	// Полностью удален сломанный вызов hrs.ProjMethod.Select().
+	// Создание 3D-точки и ее проекция распределяются на базе полиморфного 
+	// контракта ProjectionStrategy. Сигнатуры остаются абсолютно пустыми ().
+	var activeProjector ProjectionStrategy
+	if hrs.ProjMethod.Class() == "TopViewProjection" {
+		activeProjector = TopViewProjection{
+			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
+			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
+		}
+	} else {
+		activeProjector = SideViewProjection{
+			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
+			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
+		}
+	}
+
+	activeProjector.Project()
+	return container.Value
+}package main
 
 import (
 	"golang.org/x/mobile/app"
@@ -187,15 +208,9 @@ type BoolContainer struct{ Value Bool }
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
 	
-	// Мы полностью избавились от неиспользуемой локальной структуры куба cubeVertex.
-	// Координатыhrs.X и hrs.Y упаковываются прямо в Point3D на лету внутри конструкторов,
-	// исключая ошибку "declared and not used".
-	BranchFactory{
-		Condition: hrs.ProjMethod.Select().(Bool), // Проверяем активную проекцию через полиморфный выбор
-		TrueBranch: Action(EmptyAction{}),
-		FalseBranch: Action(EmptyAction{}),
-	}.Create()
-
+	// Полностью удален сломанный вызов hrs.ProjMethod.Select().
+	// Создание 3D-точки и ее проекция распределяются на базе полиморфного 
+	// контракта ProjectionStrategy. Сигнатуры остаются абсолютно пустыми ().
 	var activeProjector ProjectionStrategy
 	if hrs.ProjMethod.Class() == "TopViewProjection" {
 		activeProjector = TopViewProjection{
@@ -208,6 +223,10 @@ func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
 		}
 	}
+
+	activeProjector.Project()
+	return container.Value
+}
 
 	activeProjector.Project()
 	return container.Value
