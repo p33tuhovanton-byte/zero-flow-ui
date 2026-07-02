@@ -91,19 +91,77 @@ func intToPeano(n int, current Number) Number {
 	return intToPeano(n-1, Successor{pred: current})
 }
 
-// OpenGlPixelDriver осуществляет физический сброс бинарных команд в видеокарту
+// OpenGlPixelDriver осуществляет физический сброс бинарных команд в видеокарту.
+// Он накапливает в себе два счетчика (X и Y) по цепочке Пеано без if-условий.
 type OpenGlPixelDriver struct {
-	GL      gl.Context
-	Counter int
-	IsYAxis bool 
+	GL       gl.Context
+	CounterX int
+	CounterY int
+	ViewportW int
+	ViewportH int
+	ModeFlag  int // 0 - Scissor Grid, 1 - Scissor Object, 2 - Viewport Canvas
 }
 
 func (ogpd OpenGlPixelDriver) IdentifyClass() {}
 func (ogpd OpenGlPixelDriver) IncrementPulse() HardwareIntegerDriver {
-	return OpenGlPixelDriver{GL: ogpd.GL, Counter: ogpd.Counter + 1, IsYAxis: ogpd.IsYAxis}
+	// Базовый инкремент наращивает первый фокусный счетчик X
+	return OpenGlPixelDriver{
+		GL:        ogpd.GL,
+		CounterX:  ogpd.CounterX + 1,
+		CounterY:  ogpd.CounterY,
+		ViewportW: ogpd.ViewportW,
+		ViewportH: ogpd.ViewportH,
+		ModeFlag:  ogpd.ModeFlag,
+	}
 }
+
+func (ogpd OpenGlPixelDriver) IncrementSecondPulse() OpenGlPixelDriver {
+	// Дополнительный инкремент наращивает счетчик Y
+	return OpenGlPixelDriver{
+		GL:        ogpd.GL,
+		CounterX:  ogpd.CounterX,
+		CounterY:  ogpd.CounterY + 1,
+		ViewportW: ogpd.ViewportW,
+		ViewportH: ogpd.ViewportH,
+		ModeFlag:  ogpd.ModeFlag,
+	}
+}
+
+func (ogpd OpenGlPixelDriver) IncrementWidth() OpenGlPixelDriver {
+	return OpenGlPixelDriver{
+		GL:        ogpd.GL,
+		CounterX:  ogpd.CounterX,
+		CounterY:  ogpd.CounterY,
+		ViewportW: ogpd.ViewportW + 1,
+		ViewportH: ogpd.ViewportH,
+		ModeFlag:  ogpd.ModeFlag,
+	}
+}
+
+func (ogpd OpenGlPixelDriver) IncrementHeight() OpenGlPixelDriver {
+	return OpenGlPixelDriver{
+		GL:        ogpd.GL,
+		CounterX:  ogpd.CounterX,
+		CounterY:  ogpd.CounterY,
+		ViewportW: ogpd.ViewportW,
+		ViewportH: ogpd.ViewportH + 1,
+		ModeFlag:  ogpd.ModeFlag,
+	}
+}
+
 func (ogpd OpenGlPixelDriver) ExecuteHardwarePulse() {
-	ogpd.GL.Scissor(int32(ogpd.Counter), int32(ogpd.Counter), 2, 2)
-	ogpd.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
+	// Логика выбора режима рендеринга изолирована на аппаратной границе сред
+	if ogpd.ModeFlag == 2 {
+		ogpd.GL.Viewport(0, 0, ogpd.ViewportW, ogpd.ViewportH)
+		return
+	}
+	if ogpd.ModeFlag == 1 {
+		ogpd.GL.Scissor(int32(ogpd.CounterX), int32(ogpd.CounterY), 2, 2)
+		ogpd.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
+		ogpd.GL.Clear(gl.COLOR_BUFFER_BIT)
+		return
+	}
+	ogpd.GL.Scissor(int32(ogpd.CounterX), int32(ogpd.CounterY), 2, 2)
+	ogpd.GL.ClearColor(0.8, 0.8, 0.8, 1.0)
 	ogpd.GL.Clear(gl.COLOR_BUFFER_BIT)
 }
