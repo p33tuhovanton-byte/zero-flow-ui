@@ -283,8 +283,8 @@ isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
 container.Value = BranchFactory{
   Condition: isAfterStart,
   TrueBranch: DirectAction[Bool]{
-    Target: &UniversalContainer[Bool]{},                     , 
-    Result: isBeforeEnd, 
+    Target: &UniversalContainer[Bool]{},               
+    Result: isBeforeEnd,
   },
   FalseBranch: DirectAction[Bool]{
      Target: &UniversalContainer[Bool]{},
