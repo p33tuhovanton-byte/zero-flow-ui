@@ -13,63 +13,116 @@ type CameraStateHolder struct {
 	CurrentProjection ProjectionStrategy
 }
 
+type SystemEvent interface {
+	Object
+	NotifyDispatcher()
+}
+
+// ============================================================================
+// НАВЕДЕНИЕ ВЕЧНОГО РЕАКТИВНОГО АВТОМАТА (Изолированная граница сред)
+// ============================================================================
+
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
+
 	app.Main(func(a app.App) {
-		var glCtx gl.Context
-		var screenWidth, screenHeight int
-		for e := range a.Events() {
-			switch e := a.Filter(e).(type) {
-			case lifecycle.Event:
-				glCtx, _ = e.DrawContext.(gl.Context)
-			case size.Event:
-				screenWidth, screenHeight = e.WidthPx, e.HeightPx
-			case touch.Event:
-				if e.Type == touch.TypeBegin {
-					TouchPulseEvent{StateHolder: holder}.Trigger()
-				}
-			case paint.Event:
-				if glCtx == nil {
-					continue
-				}
-				InitPeanoFactory{LimitX: screenWidth, LimitY: screenHeight, OnReady: GameLauncherAcceptor{GL: glCtx, Holder: holder}}.StartBuild()
-				a.Publish()
-			}
-		}
+		// Запускаем реактивный автомат, полностью контролирующий поток Gomobile.
+		// Вся процедурная неопределенность заперта внутри этой изолированной функции.
+		runLifecycleLoop(a.Events(), holder, nil, Zero{}, Zero{})
 	})
 }
 
-type InitPeanoFactory struct {
-	LimitX, LimitY  int
-	Current, SavedX Number
-	OnReady         GameLauncherAcceptor
-}
+// runLifecycleLoop — вечный изолированный автомат. Находится строго на границе сред.
+// Внутри бизнес-структур приложения (Loop, Сцена, Числа) типа any больше нет.
+func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Context, w Number, h Number) {
+	raw := <-events
 
-func (ipf InitPeanoFactory) StartBuild() { ipf.BuildX() }
-func (ipf InitPeanoFactory) BuildX() {
-	if ipf.LimitX <= 0 {
-		InitPeanoFactory{LimitY: ipf.LimitY, Current: Zero{}, SavedX: ipf.Current, OnReady: ipf.OnReady}.BuildY()
+	// Мгновенное реактивное вытеснение типа any на границе сред
+	evLifecycle, okLifecycle := raw.(lifecycle.Event)
+	if okLifecycle {
+		glCtx, _ := evLifecycle.DrawContext.(gl.Context)
+		AppLifecycleLoop{
+			StateHolder: holder,
+			GLContext:   glCtx,
+			WidthNum:    w,
+			HeightNum:   h,
+		}.DispatchLifecycle()
+		runLifecycleLoop(events, holder, glCtx, w, h)
 		return
 	}
-	InitPeanoFactory{LimitX: ipf.LimitX - 1, LimitY: ipf.LimitY, Current: Successor{pred: ipf.Current}, OnReady: ipf.OnReady}.BuildX()
-}
-func (ipf InitPeanoFactory) BuildY() {
-	if ipf.LimitY <= 0 {
-		ipf.OnReady.Launch()
+
+	evSize, okSize := raw.(size.Event)
+	if okSize {
+		// Безопасная конвертация размеров в Числа Пеано на границе сред
+		newW := intToPeano(evSize.WidthPx, Zero{})
+		newH := intToPeano(evSize.HeightPx, Zero{})
+		AppLifecycleLoop{
+			StateHolder: holder,
+			GLContext:   ctx,
+			WidthNum:    newW,
+			HeightNum:   newH,
+		}.DispatchSize()
+		runLifecycleLoop(events, holder, ctx, newW, newH)
 		return
 	}
-	InitPeanoFactory{LimitY: ipf.LimitY - 1, Current: Successor{pred: ipf.Current}, SavedX: ipf.SavedX, OnReady: ipf.OnReady}.BuildY()
+
+	evTouch, okTouch := raw.(touch.Event)
+	if okTouch {
+		if evTouch.Type == touch.TypeBegin {
+			TouchPulseEvent{StateHolder: holder}.Trigger()
+		}
+		runLifecycleLoop(events, holder, ctx, w, h)
+		return
+	}
+
+	evPaint, okPaint := raw.(paint.Event)
+	if okPaint {
+		AppLifecycleLoop{
+			StateHolder: holder,
+			GLContext:   ctx,
+			WidthNum:    w,
+			HeightNum:   h,
+		}.DispatchPaint()
+		runLifecycleLoop(events, holder, ctx, w, h)
+		return
+	}
+
+	// Пропуск неизвестных событий системы
+	runLifecycleLoop(events, holder, ctx, w, h)
 }
 
-type GameLauncherAcceptor struct {
-	GL        gl.Context
-	Holder    *CameraStateHolder
-	WidthNum  Number
-	HeightNum Number
+// intToPeano — инфраструктурный хелпер на границе сред
+func intToPeano(n int, current Number) Number {
+	if n <= 0 {
+		return current
+	}
+	return intToPeano(n-1, Successor{pred: current})
 }
 
-func (gla GameLauncherAcceptor) Launch() {
-	NativeGameRenderEvent{GL: gla.GL, Width: gla.WidthNum, Height: gla.HeightNum, Projection: gla.Holder.CurrentProjection}.Trigger()
+// ============================================================================
+// ЧИСТЫЙ ОБЪЕКТНЫЙ ЦИКЛ РЕНДЕРИНГА (Девственно пуст от any и каналов)
+// ============================================================================
+
+type AppLifecycleLoop struct {
+	StateHolder *CameraStateHolder
+	GLContext   gl.Context
+	WidthNum    Number
+	HeightNum   Number
+}
+
+func (all AppLifecycleLoop) DispatchLifecycle() {}
+func (all AppLifecycleLoop) DispatchSize()      {}
+
+func (all AppLifecycleLoop) DispatchPaint() {
+	// Если графический контекст OpenGL готов — запускаем сканирование
+	if all.GLContext != nil {
+		NativeGameRenderEvent{
+			GL:         all.GLContext,
+			Width:      all.WidthNum,
+			Height:     all.HeightNum,
+			Projection: all.StateHolder.CurrentProjection,
+		}.Trigger()
+	}
 }
 
 type TouchPulseEvent struct{ StateHolder *CameraStateHolder }
@@ -93,7 +146,6 @@ type NativeGameRenderEvent struct {
 
 func (ngre NativeGameRenderEvent) IdentifyClass() {}
 func (ngre NativeGameRenderEvent) Trigger() {
-	// Перед запуском сканера очищаем нативный буфер экрана базовым цветом
 	ngre.GL.ClearColor(1.0, 1.0, 1.0, 1.0)
 	ngre.GL.Clear(gl.COLOR_BUFFER_BIT)
 
@@ -131,11 +183,10 @@ func (cs CanvasScanner) IdentifyClass() {}
 type PixelSaveAcceptor struct {
 	Scanner       CanvasScanner
 	UpdatedCanvas OpenGlCanvas
-	InjectedColor GameColor 
+	InjectedColor GameColor
 }
 
 func (psa PixelSaveAcceptor) AcceptColor() {
-	// Как только цвет вычислен — объект цвета сам дает команду видеокарте на покраску пикселя
 	psa.InjectedColor.PaintHardwarePixel()
 
 	CanvasScanner{
