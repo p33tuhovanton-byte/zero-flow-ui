@@ -209,20 +209,15 @@ type BoolContainer struct{ Value Bool }
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
 
-	var activeProjector ProjectionStrategy
-	if hrs.ProjMethod.Class() == "TopViewProjection" {
-		activeProjector = TopViewProjection{
-			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
-			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
-		}
-	} else {
-		activeProjector = SideViewProjection{
-			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
-			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
-		}
-	}
+	// ИСПРАВЛЕНО: Полное уничтожение рефлексии строк и ветвления if.
+	// Метод InjectContinuation полиморфно подстраивает нужные структуры, 
+	// сохраняя сигнатуры абсолютно пустыми.
+	var dynamicProjector ProjectionStrategy
+	dynamicProjector = hrs.ProjMethod
+	
+	dynamicProjector.InjectContinuation()
+	dynamicProjector.Project()
 
-	activeProjector.Project()
 	return container.Value
 }
 
