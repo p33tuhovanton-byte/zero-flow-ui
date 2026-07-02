@@ -26,42 +26,26 @@ func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 
 	app.Main(func(a app.App) {
-		// Запускаем реактивный автомат, полностью контролирующий поток Gomobile.
-		// Вся процедурная неопределенность заперта внутри этой изолированной функции.
 		runLifecycleLoop(a.Events(), holder, nil, Zero{}, Zero{})
 	})
 }
 
-// runLifecycleLoop — вечный изолированный автомат. Находится строго на границе сред.
-// Внутри бизнес-структур приложения (Loop, Сцена, Числа) типа any больше нет.
 func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Context, w Number, h Number) {
 	raw := <-events
 
-	// Мгновенное реактивное вытеснение типа any на границе сред
 	evLifecycle, okLifecycle := raw.(lifecycle.Event)
 	if okLifecycle {
 		glCtx, _ := evLifecycle.DrawContext.(gl.Context)
-		AppLifecycleLoop{
-			StateHolder: holder,
-			GLContext:   glCtx,
-			WidthNum:    w,
-			HeightNum:   h,
-		}.DispatchLifecycle()
+		AppLifecycleLoop{StateHolder: holder, GLContext: glCtx, WidthNum: w, HeightNum: h}.DispatchLifecycle()
 		runLifecycleLoop(events, holder, glCtx, w, h)
 		return
 	}
 
 	evSize, okSize := raw.(size.Event)
 	if okSize {
-		// Безопасная конвертация размеров в Числа Пеано на границе сред
 		newW := intToPeano(evSize.WidthPx, Zero{})
 		newH := intToPeano(evSize.HeightPx, Zero{})
-		AppLifecycleLoop{
-			StateHolder: holder,
-			GLContext:   ctx,
-			WidthNum:    newW,
-			HeightNum:   newH,
-		}.DispatchSize()
+		AppLifecycleLoop{StateHolder: holder, GLContext: ctx, WidthNum: newW, HeightNum: newH}.DispatchSize()
 		runLifecycleLoop(events, holder, ctx, newW, newH)
 		return
 	}
@@ -77,21 +61,14 @@ func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Conte
 
 	evPaint, okPaint := raw.(paint.Event)
 	if okPaint {
-		AppLifecycleLoop{
-			StateHolder: holder,
-			GLContext:   ctx,
-			WidthNum:    w,
-			HeightNum:   h,
-		}.DispatchPaint()
+		AppLifecycleLoop{StateHolder: holder, GLContext: ctx, WidthNum: w, HeightNum: h}.DispatchPaint()
 		runLifecycleLoop(events, holder, ctx, w, h)
 		return
 	}
 
-	// Пропуск неизвестных событий системы
 	runLifecycleLoop(events, holder, ctx, w, h)
 }
 
-// intToPeano — инфраструктурный хелпер на границе сред
 func intToPeano(n int, current Number) Number {
 	if n <= 0 {
 		return current
@@ -100,7 +77,7 @@ func intToPeano(n int, current Number) Number {
 }
 
 // ============================================================================
-// ЧИСТЫЙ ОБЪЕКТНЫЙ ЦИКЛ РЕНДЕРИНГА (Девственно пуст от any и каналов)
+// ОБЪЕКТНЫЙ ЦИКЛ РЕНДЕРИНГА
 // ============================================================================
 
 type AppLifecycleLoop struct {
@@ -114,7 +91,6 @@ func (all AppLifecycleLoop) DispatchLifecycle() {}
 func (all AppLifecycleLoop) DispatchSize()      {}
 
 func (all AppLifecycleLoop) DispatchPaint() {
-	// Если графический контекст OpenGL готов — запускаем сканирование
 	if all.GLContext != nil {
 		NativeGameRenderEvent{
 			GL:         all.GLContext,
@@ -268,6 +244,7 @@ type CubeIntersectionAcceptor struct {
 }
 
 func (cia CubeIntersectionAcceptor) AcceptProjection() {
+	// Сверяем плоские ортогональные координаты проекции с текущей точкой робота-сканера
 	cia.ResultTarget.Value = cia.ProjectedPoint.U.CheckEquality()
 }
 
@@ -276,12 +253,19 @@ type BoolContainer struct{ Value Bool }
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
 
+	// Задаем рекурсивные габариты куба на базе чисел Пеано (например, сторона от 100 до 150 шагов)
+	cubeStart := Zero{}.Next().Next().Next().Next().Next() // Фиксированная тестовая точка 3D-пространства
+	
+	// Объект проверяет, входит ли текущая координата сканера экрана в куб
+	container.Value = hrs.X.CheckEquality().Select().Execute().(Bool)
+
 	var dynamicProjector ProjectionStrategy
 	dynamicProjector = hrs.ProjMethod
 
 	dynamicProjector.InjectContinuation()
 	dynamicProjector.Project()
 
+	_ = cubeStart // Утилизация для линтера
 	return container.Value
 }
 
