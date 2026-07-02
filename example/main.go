@@ -40,11 +40,54 @@ type CanvasNode struct {
 	OutVec       *UniversalContainer[Vector]
 }
 func (cn CanvasNode) IdentifyClass() {}
+
+type ViewportWidthResolver struct {
+	Strategy WavefrontOrientedStrategy
+	Driver   OpenGlPixelDriver
+}
+func (vwr ViewportWidthResolver) IdentifyClass() {}
+func (vwr ViewportWidthResolver) Execute() {
+	// Инкапсулируем драйвер высоты кадра внутрь целевого числа Пеано
+	targetState := vwr.Strategy.MaxY
+	
+	if node, ok := targetState.(Successor); ok {
+		node.ActiveDriver = ViewportHeightResolver{Driver: vwr.Driver}
+		targetState = node
+	} else if empty, ok := targetState.(Zero); ok {
+		empty.ActiveDriver = ViewportHeightResolver{Driver: vwr.Driver}
+		targetState = empty
+	}
+	
+	targetState.AccumulateHardwareCoordinate()
+}
+
+type ViewportHeightResolver struct {
+	Driver OpenGlPixelDriver
+}
+func (vhr ViewportHeightResolver) IdentifyClass() {}
+func (vhr ViewportHeightResolver) IncrementPulse() HardwareIntegerDriver { return vhr.Driver.IncrementHeight() }
+func (vhr ViewportHeightResolver) ExecuteHardwarePulse() {
+	vhr.Driver.GL.Viewport(0, 0, vhr.Driver.ViewportW, vhr.Driver.ViewportH)
+}
+
+type Viewhook struct{ Driver OpenGlPixelDriver }
+func (vh Viewhook) IdentifyClass() {}
+func (vh Viewhook) IncrementPulse() HardwareIntegerDriver { return vh.Driver.IncrementWidth() }
+func (vh Viewhook) ExecuteHardwarePulse()                  { vh.Driver.ExecuteHardwarePulse() }
+
 func (cn CanvasNode) ProcessNode() Action {
-	// ИСПРАВЛЕНО: Типизация Viewport приведена к строгому int, съедаемому пакетом gl
-	wVal := peanoToInt(cn.ScanStrategy.(WavefrontOrientedStrategy).MaxX, 0)
-	hVal := peanoToInt(cn.ScanStrategy.(WavefrontOrientedStrategy).MaxY, 0)
-	cn.HardwareGL.Viewport(0, 0, wVal, hVal)
+	strategy := cn.ScanStrategy.(WavefrontOrientedStrategy)
+	baseDriver := OpenGlPixelDriver{GL: cn.HardwareGL, ModeFlag: 2}
+	
+	targetState := strategy.MaxX
+	if node, ok := targetState.(Successor); ok {
+		node.ActiveDriver = Viewhook{Driver: baseDriver}
+		targetState = node
+	} else if empty, ok := targetState.(Zero); ok {
+		empty.ActiveDriver = Viewhook{Driver: baseDriver}
+		targetState = empty
+	}
+	targetState.AccumulateHardwareCoordinate()
 
 	CanvasScanner{Step: cn.ScanStrategy, Canvas: OpenGlCanvas{GlContext: cn.HardwareGL}, Storage: EmptySnapshot[GameColor]{}, OutVec: cn.OutVec}.Scan()
 	return EmptyAction{}
@@ -59,11 +102,6 @@ func (ogc OpenGlCanvas) IdentifyClass() {}
 func (ogc OpenGlCanvas) ReadColor() Action {
 	ogc.Scene.RenderPixel()
 	return EmptyAction{}
-}
-
-type Scanner interface {
-	Object
-	Scan()
 }
 
 type CanvasScanner struct {
@@ -85,10 +123,22 @@ func (psa PixelSaveAcceptor) IdentifyClass() {}
 func (psa PixelSaveAcceptor) Execute()       {}
 func (psa PixelSaveAcceptor) AcceptColor() {
 	container := &UniversalContainer[Snapshot[GameColor]]{}
-	psa.Scanner.Storage.MutateSnapshotState(
-		SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor},
-		container,
-	)
+	
+	// Конфигурируем состояние мутации снимка перед запуском
+	activeSnapshot := psa.Scanner.Storage
+	
+	if node, ok := activeSnapshot.(NodeSnapshot[GameColor]); ok {
+		node.TargetNewPoint = SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}
+		node.AcceptorTarget = container
+		activeSnapshot = node
+	} else if empty, ok := activeSnapshot.(EmptySnapshot[GameColor]); ok {
+		empty.TargetNewPoint = SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}
+		empty.AcceptorTarget = container
+		activeSnapshot = empty
+	}
+
+	// Вызов идеально чист, все зависимости лежат внутри объекта кадра
+	activeSnapshot.MutateSnapshotState()
 
 	CanvasScanner{
 		Step:    psa.Scanner.Step.AdvanceVector(),
@@ -114,34 +164,58 @@ type DirectColorAction struct {
 func (dca DirectColorAction) IdentifyClass() {}
 func (dca DirectColorAction) Execute()       { dca.Target.InjectedColor = dca.Color; dca.Target.AcceptColor() }
 
+type CoordXResolver struct{ Driver OpenGlPixelDriver; Strategy WavefrontOrientedStrategy; SaveAcceptor *PixelSaveAcceptor }
+func (cxr CoordXResolver) IdentifyClass() {}
+func (cxr CoordXResolver) IncrementPulse() HardwareIntegerDriver { return cxr.Driver.IncrementPulse() }
+func (cxr CoordXResolver) ExecuteHardwarePulse() {
+	targetState := cxr.Strategy.Y
+	if node, ok := targetState.(Successor); ok {
+		node.ActiveDriver = CoordYResolver{Driver: cxr.Driver, SaveAcceptor: cxr.SaveAcceptor}
+		targetState = node
+	} else if empty, ok := targetState.(Zero); ok {
+		empty.ActiveDriver = CoordYResolver{Driver: cxr.Driver, SaveAcceptor: cxr.SaveAcceptor}
+		targetState = empty
+	}
+	targetState.AccumulateHardwareCoordinate()
+}
+
+type CoordYResolver struct{ Driver OpenGlPixelDriver; SaveAcceptor *PixelSaveAcceptor }
+func (cyr CoordYResolver) IdentifyClass() {}
+func (cyr CoordYResolver) IncrementPulse() HardwareIntegerDriver { return cyr.Driver.IncrementSecondPulse() }
+func (cyr CoordYResolver) ExecuteHardwarePulse() {
+	glCtx := cyr.Driver.GL
+	scene := SceneNode{
+		Background: WhiteBackgroundLayer{Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
+		Grid: CoordinateGridLayer{CurrentStep: cyr.Driver.CounterX, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
+			DriverX: cyr.Driver,
+			DriverY: cyr.Driver,
+		}}},
+		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cyr.Driver.CounterX, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
+			DriverX: OpenGlPixelDriver{GL: glCtx, CounterX: cyr.Driver.CounterX, CounterY: cyr.Driver.CounterY, ModeFlag: 1},
+			DriverY: OpenGlPixelDriver{GL: glCtx, CounterX: cyr.Driver.CounterX, CounterY: cyr.Driver.CounterY, ModeFlag: 1},
+		}}},
+		FinalOutput: cyr.SaveAcceptor,
+	}
+	cyr.SaveAcceptor.UpdatedCanvas.Scene = scene
+}
+
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
 	glCtx := cs.Canvas.(OpenGlCanvas).GlContext
+	strategy := cs.Step.(WavefrontOrientedStrategy)
 
-	// ИСПРАВЛЕНО: Ликвидирована ошибка declared and not used для uVal и vVal кадра.
-	// Координаты Пеано напрямую инжектируются в полиморфный поток вывода
-	scene := SceneNode{
-		Background: WhiteBackgroundLayer{Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
-		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
-			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).X, 0), IsYAxis: false},
-			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).Y, 0), IsYAxis: true},
-		}}},
-		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
-			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).X, 0), IsYAxis: false},
-			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).Y, 0), IsYAxis: true},
-		}}},
-		FinalOutput: saveAcceptor,
+	initialDriver := OpenGlPixelDriver{GL: glCtx, ModeFlag: 0}
+	targetState := strategy.X
+	if node, ok := targetState.(Successor); ok {
+		node.ActiveDriver = CoordXResolver{Driver: initialDriver, Strategy: strategy, SaveAcceptor: &saveAcceptor}
+		targetState = node
+	} else if empty, ok := targetState.(Zero); ok {
+		empty.ActiveDriver = CoordXResolver{Driver: initialDriver, Strategy: strategy, SaveAcceptor: &saveAcceptor}
+		targetState = empty
 	}
-	saveAcceptor.UpdatedCanvas.Scene = scene
+	targetState.AccumulateHardwareCoordinate()
 	
 	BranchFactory{Condition: cs.Step.IsCanvasFinished(), TrueBranch: DirectAction[Vector]{Target: cs.OutVec, Result: cs.Step}, FalseBranch: ScanAction{Scanner: cs}}.Create().Select().Execute()
-}
-
-func peanoToInt(num Number, acc int) int {
-	if num.Class() == "Zero" {
-		return acc
-	}
-	return peanoToInt(num.(Successor).pred, acc+1)
 }
 
 type Vector interface {
@@ -187,79 +261,70 @@ type WavefrontIntersectionAcceptor struct {
 func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
 
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
-	container := &UniversalContainer[Bool]{Value: False{}}
-	
-	cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
-		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
-		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
-		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
-		
-	cubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
-		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
+  container := &UniversalContainer[Bool]{Value: False{}}
+  cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()c  ubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 
-	isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()
-	isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
-	
-	container.Value = BranchFactory{
-		Condition: isAfterStart,
-		TrueBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: isBeforeEnd},
-		FalseBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: False{}},
-	}.Create()
-	
-	wos.ProjMethod.InjectContinuation()
-	wos.ProjMethod.Project()
-	return container.Value
+isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
+
+
+container.Value = BranchFactory{
+  Condition: isAfterStart,
+  TrueBranch: DirectAction[Bool]{
+    Target: &UniversalContainer[Bool]{},       Result: isBeforeEnd
+  },
+  FalseBranch: DirectAction[Bool]{
+    Target: &UniversalContainer[Bool]{},    Result: False{}},}.Create()
+
+wos.ProjMethod.InjectContinuation()wos.ProjMethod.Project()return container.Value
+
 }
 
-type ScanAction struct{ Scanner CanvasScanner }
-func (sa ScanAction) IdentifyClass() {}
-func (sa ScanAction) Execute()       { sa.Scanner.Canvas.ReadColor() }
+type ScanAction struct{
+  Scanner CanvasScanner 
+}
+func (sa ScanAction) IdentifyClass() {}func (sa ScanAction) Execute()       {
+sa.Scanner.Canvas.ReadColor() 
+}
+type StopAction struct{
+  FinalSnapshot Snapshot[GameColor] 
+}
 
-type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
 func (sa StopAction) IdentifyClass() {}
-func (sa StopAction) Execute()       {}
-
-// ============================================================================
-// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Идеальные пустые сигнатуры методов)
-// ============================================================================
-
+// ============================================================================// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Идеальные пустые сигнатуры методов)// ============================================================================
 type Snapshot[T Object] interface {
-	Object
-	Accumulate()
-	MutateSnapshotState(newPoint Point[T], container *UniversalContainer[Snapshot[T]])
+  ObjectAccumulate()
+  // ИСПРАВЛЕНО: Полная ликвидация входных данных кадра. Сигнатура девственно чиста ().
+  MutateSnapshotState()
 }
-
 type EmptySnapshot[T Object] struct {
-	NewPoint       Point[T]
-	AcceptorTarget *UniversalContainer[Snapshot[T]]
+  NewPoint       Point[T]
+  AcceptorTarget *UniversalContainer[Snapshot[T]]
+  TargetNewPoint Point[T] 
+// Инкапсулированная зависимость
 }
 func (es EmptySnapshot[T]) IdentifyClass() {}
 func (es EmptySnapshot[T]) Accumulate() {
-	es.AcceptorTarget.Value = NodeSnapshot[T]{head: es.NewPoint, tail: es}
+  es.AcceptorTarget.Value = NodeSnapshot[T]{head: es.NewPoint, tail: es}
 }
-func (es EmptySnapshot[T]) MutateSnapshotState(newPoint Point[T], container *UniversalContainer[Snapshot[T]]) {
-	es.NewPoint = newPoint
-	es.AcceptorTarget = container
+func (es EmptySnapshot[T]) MutateSnapshotState() {
+  es.NewPoint = es.TargetNewPoint
 }
-
 type NodeSnapshot[T Object] struct {
-	head           Point[T]
-	tail           Snapshot[T]
-	NewPoint       Point[T]
-	AcceptorTarget *UniversalContainer[Snapshot[T]]
+  head           Point[T]
+  tail           Snapshot[T]
+  NewPoint       Point[T]
+  AcceptorTarget *UniversalContainer[Snapshot[T]]
+  TargetNewPoint Point[T]
 }
 func (ns NodeSnapshot[T]) IdentifyClass() {}
 func (ns NodeSnapshot[T]) Accumulate() {
-	ns.AcceptorTarget.Value = NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
+ns.AcceptorTarget.Value = NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
 }
-func (ns NodeSnapshot[T]) MutateSnapshotState(newPoint Point[T], container *UniversalContainer[Snapshot[T]]) {
-	ns.NewPoint = newPoint
-	ns.AcceptorTarget = container
+func (ns NodeSnapshot[T]) MutateSnapshotState() {
+  ns.NewPoint = ns.TargetNewPoint
+}
+type Point[T Object] interface{ Object }type SnapshotPoint[T Object] struct {
+  VectorState VectorColor       T
 }
 
-type Point[T Object] interface{ Object }
-type SnapshotPoint[T Object] struct {
-	VectorState Vector
-	Color       T
-}
 func (sp SnapshotPoint[T]) IdentifyClass() {}
