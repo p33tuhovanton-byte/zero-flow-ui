@@ -13,15 +13,6 @@ type CameraStateHolder struct {
 	CurrentProjection ProjectionStrategy
 }
 
-type SystemEvent interface {
-	Object
-	NotifyDispatcher()
-}
-
-// ============================================================================
-// НАВЕДЕНИЕ ВЕЧНОГО РЕАКТИВНОГО АВТОМАТА (Изолированная граница сред)
-// ============================================================================
-
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 
@@ -54,9 +45,6 @@ func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Conte
 		runLifecycleLoop(events, holder, ctx, w, h)
 		return
 	}
-	
-	// ИСПРАВЛЕНО: evPaint полностью удален, оставлен только чистый логический флаг okPaint.
-	// Это исключает ошибку "declared and not used" на этапе компиляции NDK.
 	_, okPaint := raw.(paint.Event)
 	if okPaint {
 		AppLifecycleLoop{StateHolder: holder, GLContext: ctx, WidthNum: w, HeightNum: h}.DispatchPaint()
@@ -233,8 +221,9 @@ func (dva DirectVectorAction) Execute()       { dva.Target.Value = dva.Result }
 func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
 func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
 
+// ИСПРАВЛЕНО: Структура переведена на контракт WavefrontOrientedStrategy
 type CubeIntersectionAcceptor struct {
-	ScannerCoords  HorizontalRowStrategy
+	ScannerCoords  WavefrontOrientedStrategy
 	ResultTarget   *BoolContainer
 	ProjectedPoint Vector2D
 }
