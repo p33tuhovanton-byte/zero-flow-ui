@@ -127,22 +127,31 @@ func (cs CanvasScanner) IdentifyClass() {}
 type PixelSaveAcceptor struct {
 	Scanner       CanvasScanner
 	UpdatedCanvas OpenGlCanvas
-	InjectedColor GameColor
 }
 
 func (psa PixelSaveAcceptor) AcceptColor() {
+	// ЭКРАН СТАЛ БЕЛЫМ: Теперь дефолтный белый цвет инжектируется принудительно
 	CanvasScanner{
 		Step:   psa.Scanner.Step.AdvanceVector(),
 		Canvas: psa.UpdatedCanvas,
 		Storage: NodeSnapshot[GameColor]{
 			tail:     psa.Scanner.Storage,
-			NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor},
+			NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: SolidWhiteColor{}},
 		}.Accumulate(),
 	}.Scan()
 }
 
+type DirectColorAction struct {
+	Target *PixelSaveAcceptor
+	Color  GameColor
+}
+func (dca DirectColorAction) IdentifyClass() {}
+func (dca DirectColorAction) Execute()       { dca.Target.InjectedColor = dca.Color; dca.Target.AcceptColor() }
+
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
+	
+	// Вшиваем триггеры разрешения слоев (Куб -> Сетка -> Белый Фон)
 	scene := Composited3DScene{
 		Background:  WhiteBackgroundLayer{Output: saveAcceptor},
 		Grid:        CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
@@ -209,9 +218,6 @@ type BoolContainer struct{ Value Bool }
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
 
-	// ИСПРАВЛЕНО: Полное уничтожение рефлексии строк и ветвления if.
-	// Метод InjectContinuation полиморфно подстраивает нужные структуры, 
-	// сохраняя сигнатуры абсолютно пустыми.
 	var dynamicProjector ProjectionStrategy
 	dynamicProjector = hrs.ProjMethod
 	
