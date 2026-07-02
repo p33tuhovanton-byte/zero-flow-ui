@@ -323,7 +323,10 @@ ns.AcceptorTarget.Value = NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
 func (ns NodeSnapshot[T]) MutateSnapshotState() {
   ns.NewPoint = ns.TargetNewPoint
 }
-type Point[T Object] interface{ Object }type SnapshotPoint[T Object] struct {
+
+type Point[T Object] interface{ Object }
+
+type SnapshotPoint[T Object]struct {
   VectorState Vector
   Color       T
 }
