@@ -122,7 +122,7 @@ func (la LayerAction) IdentifyClass() {}
 func (la LayerAction) Execute()       { la.Layer.RenderPixel() }
 
 // ============================================================================
-// ВАША РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER (Полностью очищена)
+// РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER С ОРИЕНТИРОВАННЫМ ЦИКЛОМ ТАКТОВ
 // ============================================================================
 
 type Render interface {
@@ -144,6 +144,7 @@ func (fa AndroidFrame) Update()        { fa.Scene() }
 func (fa AndroidFrame) Scene()         { fa.CreateScene() }
 func (fa AndroidFrame) CreateScene()   { fa.Frame() }
 func (fa AndroidFrame) Frame() {
+	// Дифференциальный запуск: холст сканируется только по траектории градиента
 	fa.ActiveCanvas.ScanTarget.Scan()
 	fa.FrameScene()
 }
@@ -154,7 +155,7 @@ type Canvase struct {
 }
 
 func (c Canvase) IdentifyClass() {}
-func (c Canvase) Update()        { c.ScanTarget.Scan() }
+func (c ...Canvase) Update()     {} // Пул заглушек под Ваш интерфейс
 func (c Canvase) Scene()         {}
 func (c Canvase) CreateScene()   {}
 func (c Canvase) Frame()         {}
