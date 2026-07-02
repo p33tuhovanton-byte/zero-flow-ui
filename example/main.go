@@ -276,7 +276,8 @@ func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
   cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
  cubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 
-isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
+isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()
+isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
 
 
 container.Value = BranchFactory{
