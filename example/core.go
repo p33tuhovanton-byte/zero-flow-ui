@@ -152,19 +152,9 @@ type BranchFactory struct {
 	FalseBranch Action
 }
 
+// ИСПРАВЛЕНО: Полное вырезание TypeResolver и вызова Class().
+// Узел ветвления отправляет импульс напрямую в булев Select() кадра.
 func (bf BranchFactory) Create() Bool {
-	container := &UniversalContainer[Bool]{}
-	TypeResolver{ClassName: bf.Condition.Class(), T: bf.TrueBranch, F: bf.FalseBranch, Target: container}.Resolve()
 	bf.Condition.Select().Execute()
 	return bf.Condition
-}
-
-type TypeResolver struct {
-	ClassName string
-	T, F      Action
-	Target    *UniversalContainer[Bool]
-}
-
-func (tr TypeResolver) Resolve() {
-	tr.Target.Value = True{TrueBranch: tr.T, FalseBranch: tr.F}
 }
