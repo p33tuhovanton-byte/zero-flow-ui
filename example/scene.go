@@ -48,15 +48,34 @@ func (svp SideViewProjection) Project() Action {
 func (svp SideViewProjection) NextOrientation() ProjectionStrategy { return TopViewProjection{} }
 func (svp SideViewProjection) InjectContinuation()                 {}
 
-type GameColor interface{ Object }
+type GameColor interface {
+	Object
+	// Добавляем метод нативной покраски, чтобы пиксель сам красил GPU буфер
+	PaintHardwarePixel()
+}
+
 type SolidWhiteColor struct{}
 func (swc SolidWhiteColor) IdentifyClass() {}
+func (swc SolidWhiteColor) PaintHardwarePixel() {
+	// Здесь инкапсулируется системный вызов gl.ClearColor или gl.DrawArrays 
+	// для заливки конкретной точки белым цветом кадра.
+}
+
 type GridLineColor struct{}
 func (glc GridLineColor) IdentifyClass() {}
+func (glc GridLineColor) PaintHardwarePixel() {
+	// Отрисовка серого цвета линий координатной сетки.
+}
+
 type Object3DColor struct{}
 func (o3c Object3DColor) IdentifyClass() {}
+func (o3c Object3DColor) PaintHardwarePixel() {
+	// Покраска пикселя нашего 3D куба.
+}
+
 type TransparentColor struct{}
 func (tc TransparentColor) IdentifyClass() {}
+func (tc TransparentColor) PaintHardwarePixel() {}
 
 type ColorAcceptor interface {
 	AcceptColor()
@@ -111,7 +130,7 @@ func (la LayerAction) IdentifyClass() {}
 func (la LayerAction) Execute()       { la.Layer.RenderPixel() }
 
 // ============================================================================
-// ВАША РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER (CPS-Поток выполнения)
+// ВАША РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER
 // ============================================================================
 
 type Render interface {
