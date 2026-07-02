@@ -14,16 +14,14 @@ type CameraStateHolder struct {
 }
 
 // ============================================================================
-// НАВЕДЕНИЕ ВЕЧНОГО АВТОМАТА (Исправленный рендеринг и Swap Buffers)
+// НАВЕДЕНИЕ ВЕЧНОГО АВТОМАТА (Изолированная граница сред)
 // ============================================================================
 
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 
 	app.Main(func(a app.App) {
-		// Инициализируем стартовый волновой вектор сканера на внешней границе
-		var currentScanVector Vector = WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: Zero{}, MaxY: Zero{}, DirectionDelta: Zero{}.Next()}
-		runLifecycleLoop(a, a.Events(), holder, nil, Zero{}, Zero{}, currentScanVector)
+		runLifecycleLoop(a, a.Events(), holder, nil, Zero{}, Zero{}, WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: Zero{}, MaxY: Zero{}, DirectionDelta: Zero{}.Next()})
 	})
 }
 
@@ -39,9 +37,7 @@ func runLifecycleLoop(a app.App, events <-chan any, holder *CameraStateHolder, c
 	if okSize {
 		newW := intToPeano(evSize.WidthPx, Zero{})
 		newH := intToPeano(evSize.HeightPx, Zero{})
-		// Обновляем границы кадра внутри волнового вектора
-		updatedScan := WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: newW, MaxY: newH, ProjMethod: holder.CurrentProjection, DirectionDelta: Zero{}.Next()}
-		runLifecycleLoop(a, events, holder, ctx, newW, newH, updatedScan)
+		runLifecycleLoop(a, events, holder, ctx, newW, newH, WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: newW, MaxY: newH, ProjMethod: holder.CurrentProjection, DirectionDelta: Zero{}.Next()})
 		return
 	}
 	evTouch, okTouch := raw.(touch.Event)
@@ -55,25 +51,14 @@ func runLifecycleLoop(a app.App, events <-chan any, holder *CameraStateHolder, c
 	_, okPaint := raw.(paint.Event)
 	if okPaint {
 		if ctx != nil {
-			// 1. Очищаем hardware буфер экрана
+			ctx.Enable(gl.SCISSOR_TEST)
 			ctx.ClearColor(1.0, 1.0, 1.0, 1.0)
 			ctx.Clear(gl.COLOR_BUFFER_BIT)
 
-			// 2. Запускаем квантованный обход кадра. Он вернет обновленное состояние вектора.
 			container := &UniversalContainer[Vector]{}
-			NativeGameRenderEvent{
-				GL:         ctx,
-				Width:      w,
-				Height:     h,
-				Projection: holder.CurrentProjection,
-				CurrentVec: scanState,
-				OutVec:     container,
-			}.Trigger()
+			NativeGameRenderEvent{GL: ctx, Width: w, Height: h, Projection: holder.CurrentProjection, CurrentVec: scanState, OutVec: container}.Trigger()
 
-			// 3. ФИЗИЧЕСКИЙ ВЫВОД НА ЭКРАН: Отдаем команду драйверу переключить буферы!
 			a.Publish()
-			
-			// 4. Передаем сохраненное состояние сканирования на следующий такт
 			runLifecycleLoop(a, events, holder, ctx, w, h, container.Value)
 			return
 		}
@@ -90,27 +75,30 @@ func intToPeano(n int, current Number) Number {
 	return intToPeano(n-1, Successor{pred: current})
 }
 
-type AppLifecycleLoop struct {
-	StateHolder *CameraStateHolder
-	GLContext   gl.Context
-	WidthNum    Number
-	HeightNum   Number
+// ============================================================================
+// КОНКРЕТНАЯ РЕАЛИЗАЦИЯ АППАРАТНОГО ДРАЙВЕРА (Изолированные примитивы GPU)
+// ============================================================================
+
+type OpenGlPixelDriver struct {
+	GL      gl.Context
+	Counter int
+	IsYAxis bool // Инкапсулирует ось ориентации
 }
 
-func (all AppLifecycleLoop) DispatchLifecycle() {}
-func (all AppLifecycleLoop) DispatchSize()      {}
-func (all AppLifecycleLoop) DispatchPaint()     {}
-
-type TouchPulseEvent struct{ StateHolder *CameraStateHolder }
-func (tpe TouchPulseEvent) IdentifyClass() {}
-func (tpe TouchPulseEvent) Trigger() {
-	tpe.StateHolder.CurrentProjection = tpe.StateHolder.CurrentProjection.NextOrientation()
+func (ogpd OpenGlPixelDriver) IdentifyClass() {}
+func (ogpd OpenGlPixelDriver) IncrementPulse() HardwareIntegerDriver {
+	return OpenGlPixelDriver{GL: ogpd.GL, Counter: ogpd.Counter + 1, IsYAxis: ogpd.IsYAxis}
+}
+func (ogpd OpenGlPixelDriver) ExecuteHardwarePulse() {
+	// Физический сброс накопленного счетчика Пеано прямо в бинарную команду видеокарты
+	ogpd.GL.Scissor(int32(ogpd.Counter), int32(ogpd.Counter), 1, 1)
+	ogpd.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
+	ogpd.GL.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-type Canvas interface {
-	Object
-	ReadColor() Action
-}
+// ============================================================================
+// КВАНТОВАННЫЙ СКАНЕР И CANVAS NODE
+// ============================================================================
 
 type NativeGameRenderEvent struct {
 	GL         gl.Context
@@ -123,19 +111,14 @@ type NativeGameRenderEvent struct {
 
 func (ngre NativeGameRenderEvent) IdentifyClass() {}
 func (ngre NativeGameRenderEvent) Trigger() {
-	// Подключаем дерево узлов к квантованному сканированию кадра
-	canvasNode := CanvasNode{
-		ScanStrategy: ngre.CurrentVec,
-		HardwareGL:   ngre.GL,
-		OutVec:       ngre.OutVec,
-	}
-	
-	engineTree := CameraNode{
+	CameraNode{
 		Projection: ngre.Projection,
-		ChildNode:  canvasNode,
-	}
-
-	engineTree.ProcessNode().Execute()
+		ChildNode: CanvasNode{
+			ScanStrategy: ngre.CurrentVec,
+			HardwareGL:   ngre.GL,
+			OutVec:       ngre.OutVec,
+		},
+	}.ProcessNode().Execute()
 }
 
 type CanvasNode struct {
@@ -145,12 +128,7 @@ type CanvasNode struct {
 }
 func (cn CanvasNode) IdentifyClass() {}
 func (cn CanvasNode) ProcessNode() Action {
-	CanvasScanner{
-		Step:    cn.ScanStrategy,
-		Canvas:  OpenGlCanvas{GlContext: cn.HardwareGL},
-		Storage: EmptySnapshot[GameColor]{},
-		OutVec:  cn.OutVec,
-	}.Scan()
+	CanvasScanner{Step: cn.ScanStrategy, Canvas: OpenGlCanvas{GlContext: cn.HardwareGL}, Storage: EmptySnapshot[GameColor]{}, OutVec: cn.OutVec}.Scan()
 	return EmptyAction{}
 }
 
@@ -163,11 +141,6 @@ func (ogc OpenGlCanvas) IdentifyClass() {}
 func (ogc OpenGlCanvas) ReadColor() Action {
 	ogc.Scene.RenderPixel()
 	return EmptyAction{}
-}
-
-type Scanner interface {
-	Object
-	Scan()
 }
 
 type CanvasScanner struct {
@@ -187,47 +160,30 @@ type PixelSaveAcceptor struct {
 
 func (psa PixelSaveAcceptor) AcceptColor() {
 	psa.InjectedColor.PaintHardwarePixel()
-
-	// КВАНТОВАНИЕ: Сканируем фиксированную порцию. 
-	// Каждые N пикселей мы принудительно прерываем рекурсию, отдавая управление в Publish.
-	nextVector := psa.Scanner.Step.AdvanceVector()
-	
-	CanvasScanner{
-		Step:   nextVector,
-		Canvas: psa.UpdatedCanvas,
-		Storage: NodeSnapshot[GameColor]{
-			tail:     psa.Scanner.Storage,
-			NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor},
-		}.Accumulate(),
-		OutVec: psa.Scanner.OutVec,
-	}.Scan()
+	CanvasScanner{Step: psa.Scanner.Step.AdvanceVector(), Canvas: psa.UpdatedCanvas, Storage: NodeSnapshot[GameColor]{tail: psa.Scanner.Storage, NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}}, OutVec: psa.Scanner.OutVec}.Scan()
 }
-
-type DirectColorAction struct {
-	Target *PixelSaveAcceptor
-	Color  GameColor
-}
-func (dca DirectColorAction) IdentifyClass() {}
-func (dca DirectColorAction) Execute()       { dca.Target.InjectedColor = dca.Color; dca.Target.AcceptColor() }
 
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
+	glCtx := cs.Canvas.(OpenGlCanvas).GlContext
 
+	// Декларативное конструирование слоев без локальных переменных!
+	// Драйверы Пеано создаются на лету и вшиваются в структуры цвета.
 	scene := SceneNode{
-		Background:  WhiteBackgroundLayer{Output: saveAcceptor},
-		Grid:        CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
-		Object3D:    ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: saveAcceptor},
+		Background: WhiteBackgroundLayer{Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
+		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
+			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
+			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
+		}}},
+		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
+			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
+			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
+		}}},
 		FinalOutput: saveAcceptor,
 	}
 	saveAcceptor.UpdatedCanvas.Scene = scene
 	
-	// Объект вектора проверяет лимит кванта кадра. 
-	// Если лимит исчерпан — TrueBranch сохраняет текущий вектор в OutVec и завершает итерацию.
-	BranchFactory{
-		Condition: cs.Step.IsCanvasFinished(),
-		TrueBranch: DirectAction[Vector]{Target: cs.OutVec, Result: cs.Step},
-		FalseBranch: ScanAction{Scanner: cs},
-	}.Create().Select().Execute()
+	BranchFactory{Condition: cs.Step.IsCanvasFinished(), TrueBranch: DirectAction[Vector]{Target: cs.OutVec, Result: cs.Step}, FalseBranch: ScanAction{Scanner: cs}}.Create().Select().Execute()
 }
 
 type Vector interface {
@@ -239,22 +195,16 @@ type Vector interface {
 }
 
 type WavefrontOrientedStrategy struct {
-	X              Number
-	Y              Number
-	MaxX           Number
-	MaxY           Number
-	ProjMethod     ProjectionStrategy
-	DirectionDelta Number 
+	X, Y, MaxX, MaxY, DirectionDelta Number
+	ProjMethod                       ProjectionStrategy
 }
 
 func (wos WavefrontOrientedStrategy) IdentifyClass() {}
 
 func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 	container := &UniversalContainer[Vector]{}
-	midThreshold := Zero{}.Next().Next().Next().Next().Next()
-
 	BranchFactory{
-		Condition: wos.X.EvaluateWaveCenter(wos.MaxX, midThreshold),
+		Condition: wos.X.EvaluateWaveCenter(wos.MaxX, Zero{}.Next().Next().Next().Next().Next()),
 		TrueBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
 		FalseBranch: BranchFactory{
 			Condition:  Zero{CompareTarget: wos.X.Next()}.CheckEquality(),
@@ -262,28 +212,24 @@ func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 			FalseBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
 		}.Create().Select(),
 	}.Create().Select().Execute()
-	
 	return container.Value
 }
 
 func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
 func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
 
-type WavefrontIntersectionAcceptor struct {
-	ResultTarget   *UniversalContainer[Bool]
-	ProjectedPoint Vector2D
-}
-func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
-
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
 	container := &UniversalContainer[Bool]{Value: False{}}
-	cubeEdgeDistance := wos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{})
-	container.Value = cubeEdgeDistance.CheckEquality()
 	
-	var dynamicProjector ProjectionStrategy
-	dynamicProjector = wos.ProjMethod
-	dynamicProjector.InjectContinuation()
-	dynamicProjector.Project()
+	// Вычисляем границы 3D куба Пеано полностью через полиморфную дифференциальную цепочку
+	container.Value = BranchFactory{
+		Condition: wos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{}).CompareWithZero(),
+		TrueBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: Zero{}.Next().Next().Next().Differentiate(wos.X, Zero{}).CompareWithZero()},
+		FalseBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: False{}},
+	}.Create()
+	
+	wos.ProjMethod.InjectContinuation()
+	wos.ProjMethod.Project()
 	return container.Value
 }
 
@@ -315,7 +261,6 @@ func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { return NodeSnapshot[T]{head
 type Point[T Object] interface{ Object }
 type SnapshotPoint[T Object] struct {
 	VectorState Vector
- Color T
+	Color       T
 }
-
-func(so SnapshotPoint[T]) IdentifyClass() {}
+func (sp SnapshotPoint[T]) IdentifyClass() {}
