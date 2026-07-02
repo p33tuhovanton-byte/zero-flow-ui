@@ -32,7 +32,6 @@ type Number interface {
 	IsMultipleOfGrid() Bool
 	EvaluateGridStep(currentStep Number) Bool
 	Differentiate(other Number, accumulator Number) Number
-	// Вычисляет, находится ли координата ближе к центру или правому краю
 	EvaluateWaveCenter(maxX Number, threshold Number) Bool
 }
 
@@ -87,15 +86,13 @@ func (s Successor) Differentiate(other Number, accumulator Number) Number {
 		Condition: other.CompareWithZero(),
 		TrueBranch: DirectNumberAction{Result: s},
 		FalseBranch: DirectNumberAction{Result: s.pred.Differentiate(other.(SimpleSuccessorResolver).GetPred(), accumulator.Next())},
-	}.Create().Select().(NumberAction).ResultNum
+	}.Create()
 }
 
 type SimpleSuccessorResolver interface { GetPred() Number }
 func (s Successor) GetPred() Number { return s.pred }
 
 func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
-	// Вычисляем дифференциальное расстояние до правого края. 
-	// Если остаток пути меньше порога threshold — мы у цели.
 	distance := maxX.Differentiate(s, Zero{})
 	return BranchFactory{
 		Condition: distance.Differentiate(threshold, Zero{}).CompareWithZero(),
@@ -107,23 +104,31 @@ func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
 type DirectBoolAction struct{ Result Bool }
 func (dba DirectBoolAction) IdentifyClass() {}
 func (dba DirectBoolAction) Execute()       {}
+func (dba DirectBoolAction) GetBool() Bool  { return dba.Result }
 
 type DirectNumberAction struct{ Result Number }
 func (dna DirectNumberAction) IdentifyClass() {}
 func (dna DirectNumberAction) Execute()       {}
+func (dna DirectNumberAction) GetNumber() Number { return dna.Result }
 
-type NumberAction struct {
-	EmptyAction
-	ResultNum Number
+type NumberAction interface {
+	Action
+	GetNumber() Number
 }
-func (na NumberAction) GetNumber() Number { return na.ResultNum }
+
+type BoolAction interface {
+	Action
+	GetBool() Bool
+}
 
 type True struct{ TrueBranch, FalseBranch Action }
+
 func (t True) IdentifyClass()       {}
 func (t True) Class() string        { return "True" }
 func (t True) Select() Action       { return t.TrueBranch }
 
 type False struct{ TrueBranch, FalseBranch Action }
+
 func (f False) IdentifyClass()       {}
 func (f False) Class() string        { return "False" }
 func (f False) Select() Action       { return f.FalseBranch }
@@ -134,19 +139,9 @@ type BranchFactory struct {
 	FalseBranch Action
 }
 
+// ИСПРАВЛЕНО: Полное удаление Class() и контейнеров.
+// Объект Bool полиморфно активирует либо TrueBranch, либо FalseBranch через свой внутренний Select()
 func (bf BranchFactory) Create() Bool {
-	container := &BoolResultContainer{}
-	TypeResolver{ClassName: bf.Condition.Class(), T: bf.TrueBranch, F: bf.FalseBranch, Target: container}.Resolve()
 	bf.Condition.Select().Execute()
-	return container.Value
-}
-
-type TypeResolver struct {
-	ClassName string
-	T, F      Action
-	Target    *BoolResultContainer
-}
-
-func (tr TypeResolver) Resolve() {
-	tr.Target.Value = True{TrueBranch: tr.T, FalseBranch: tr.F}
+	return bf.Condition
 }
