@@ -1,4 +1,4 @@
-package core
+package main
 
 type Object interface {
 	IdentifyClass(consumer ClassConsumer)
