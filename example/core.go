@@ -31,8 +31,9 @@ type Number interface {
 	CompareWithSuccessor() Bool
 	IsMultipleOfGrid() Bool
 	EvaluateGridStep(currentStep Number) Bool
-	// ДИФФЕРЕНЦИАЛЬНЫЙ КОНТРАКТ: Вычисляет абсолютную разность (производную) между числами
 	Differentiate(other Number, accumulator Number) Number
+	// Вычисляет, находится ли координата ближе к центру или правому краю
+	EvaluateWaveCenter(maxX Number, threshold Number) Bool
 }
 
 type Zero struct{ CompareTarget Number }
@@ -45,11 +46,8 @@ func (z Zero) CompareWithZero() Bool { return True{TrueBranch: EmptyAction{}, Fa
 func (z Zero) CompareWithSuccessor() Bool { return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
 func (z Zero) IsMultipleOfGrid() Bool { return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
 func (z Zero) EvaluateGridStep(currentStep Number) Bool { return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
-
-func (z Zero) Differentiate(other Number, accumulator Number) Number {
-	// Разность нуля и любого числа равна самому числу (накопленному в рекурсии)
-	return accumulator
-}
+func (z Zero) Differentiate(other Number, accumulator Number) Number { return accumulator }
+func (z Zero) EvaluateWaveCenter(maxX Number, threshold Number) Bool { return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
 
 type Successor struct {
 	pred          Number
@@ -85,31 +83,47 @@ func (s Successor) EvaluateGridStep(currentStep Number) Bool {
 }
 
 func (s Successor) Differentiate(other Number, accumulator Number) Number {
-	// Рекурсивно уменьшаем оба числа Пеано, накапливая разность в CPS-стиле
 	return BranchFactory{
 		Condition: other.CompareWithZero(),
 		TrueBranch: DirectNumberAction{Result: s},
-		FalseBranch: DirectNumberAction{Result: s.pred.Differentiate(other.(Successor).pred, accumulator.Next())},
+		FalseBranch: DirectNumberAction{Result: s.pred.Differentiate(other.(SimpleSuccessorResolver).GetPred(), accumulator.Next())},
 	}.Create().Select().(NumberAction).ResultNum
 }
+
+type SimpleSuccessorResolver interface { GetPred() Number }
+func (s Successor) GetPred() Number { return s.pred }
+
+func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
+	// Вычисляем дифференциальное расстояние до правого края. 
+	// Если остаток пути меньше порога threshold — мы у цели.
+	distance := maxX.Differentiate(s, Zero{})
+	return BranchFactory{
+		Condition: distance.Differentiate(threshold, Zero{}).CompareWithZero(),
+		TrueBranch: DirectBoolAction{Result: True{}},
+		FalseBranch: DirectBoolAction{Result: False{}},
+	}.Create()
+}
+
+type DirectBoolAction struct{ Result Bool }
+func (dba DirectBoolAction) IdentifyClass() {}
+func (dba DirectBoolAction) Execute()       {}
 
 type DirectNumberAction struct{ Result Number }
 func (dna DirectNumberAction) IdentifyClass() {}
 func (dna DirectNumberAction) Execute()       {}
 
-type NumberAction interface {
-	Action
-	GetNumber() Number
+type NumberAction struct {
+	EmptyAction
+	ResultNum Number
 }
+func (na NumberAction) GetNumber() Number { return na.ResultNum }
 
 type True struct{ TrueBranch, FalseBranch Action }
-
 func (t True) IdentifyClass()       {}
 func (t True) Class() string        { return "True" }
 func (t True) Select() Action       { return t.TrueBranch }
 
 type False struct{ TrueBranch, FalseBranch Action }
-
 func (f False) IdentifyClass()       {}
 func (f False) Class() string        { return "False" }
 func (f False) Select() Action       { return f.FalseBranch }
