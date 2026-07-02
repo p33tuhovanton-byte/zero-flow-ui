@@ -15,7 +15,6 @@ type CameraStateHolder struct {
 
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
-
 	app.Main(func(a app.App) {
 		runLifecycleLoop(a.Events(), holder, nil, Zero{}, Zero{})
 	})
@@ -104,16 +103,36 @@ func (ngre NativeGameRenderEvent) Trigger() {
 	ngre.GL.ClearColor(1.0, 1.0, 1.0, 1.0)
 	ngre.GL.Clear(gl.COLOR_BUFFER_BIT)
 
+	canvasNode := CanvasNode{
+		ScanStrategy: WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection, DirectionDelta: Zero{}.Next()},
+		HardwareGL:   ngre.GL,
+	}
+	
+	engineTree := CameraNode{
+		Projection: ngre.Projection,
+		ChildNode:  canvasNode,
+	}
+
+	engineTree.ProcessNode().Execute()
+}
+
+type CanvasNode struct {
+	ScanStrategy Vector
+	HardwareGL   gl.Context
+}
+func (cn CanvasNode) IdentifyClass() {}
+func (cn CanvasNode) ProcessNode() Action {
 	CanvasScanner{
-		Step:    WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection, DirectionDelta: Zero{}.Next()},
-		Canvas:  OpenGlCanvas{GlContext: ngre.GL},
+		Step:    cn.ScanStrategy,
+		Canvas:  OpenGlCanvas{GlContext: cn.HardwareGL},
 		Storage: EmptySnapshot[GameColor]{},
 	}.Scan()
+	return EmptyAction{}
 }
 
 type OpenGlCanvas struct {
 	GlContext gl.Context
-	Scene     Composited3DScene
+	Scene     SceneNode
 }
 
 func (ogc OpenGlCanvas) IdentifyClass() {}
@@ -154,16 +173,11 @@ func (psa PixelSaveAcceptor) AcceptColor() {
 	}.Scan()
 }
 
-type DirectColorAction struct {
-	Target *PixelSaveAcceptor
-	Color  GameColor
-}
-func (dca DirectColorAction) IdentifyClass() {}
-func (dca DirectColorAction) Execute()       { dca.Target.InjectedColor = dca.Color; dca.Target.AcceptColor() }
-
+// Избавились от кастомного DirectColorAction, заменив на обобщенную команду DirectAction
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
-	scene := Composited3DScene{
+
+	scene := SceneNode{
 		Background:  WhiteBackgroundLayer{Output: saveAcceptor},
 		Grid:        CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
 		Object3D:    ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: saveAcceptor},
@@ -192,47 +206,36 @@ type WavefrontOrientedStrategy struct {
 
 func (wos WavefrontOrientedStrategy) IdentifyClass() {}
 
-type VectorContainer struct{ Value Vector }
-
 func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
-	container := &VectorContainer{}
+	// ИСПРАВЛЕНО: Кастомный VectorContainer заменен на UniversalContainer[Vector]
+	container := &UniversalContainer[Vector]{}
 	midThreshold := Zero{}.Next().Next().Next().Next().Next()
 
 	BranchFactory{
 		Condition: wos.X.EvaluateWaveCenter(wos.MaxX, midThreshold),
-		TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
+		TrueBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
 		FalseBranch: BranchFactory{
 			Condition:  Zero{CompareTarget: wos.X.Next()}.CheckEquality(),
-			TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: Zero{}, Y: wos.Y.Next(), MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
-			FalseBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
+			TrueBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: Zero{}, Y: wos.Y.Next(), MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
+			FalseBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
 		}.Create().Select(),
 	}.Create().Select().Execute()
 	
 	return container.Value
 }
 
-type DirectVectorAction struct {
-	Target *VectorContainer
-	Result Vector
-}
-func (dva DirectVectorAction) IdentifyClass() {}
-func (dva DirectVectorAction) Execute()       { dva.Target.Value = dva.Result }
-
 func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
 func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
 
-// ИСПРАВЛЕНО: Структура переведена на контракт WavefrontOrientedStrategy
-type CubeIntersectionAcceptor struct {
-	ScannerCoords  WavefrontOrientedStrategy
-	ResultTarget   *BoolContainer
+// ИСПРАВЛЕНО: Кастомный CubeIntersectionAcceptor полностью удален за ненадобностью!
+type WavefrontIntersectionAcceptor struct {
+	ResultTarget   *UniversalContainer[Bool]
 	ProjectedPoint Vector2D
 }
-func (cia CubeIntersectionAcceptor) AcceptProjection() { cia.ResultTarget.Value = cia.ProjectedPoint.U.CheckEquality() }
-
-type BoolContainer struct{ Value Bool }
+func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
 
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
-	container := &BoolContainer{Value: False{}}
+	container := &UniversalContainer[Bool]{Value: False{}}
 	cubeEdgeDistance := wos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{})
 	container.Value = cubeEdgeDistance.CheckEquality()
 	
