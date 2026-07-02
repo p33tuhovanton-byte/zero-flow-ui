@@ -324,7 +324,8 @@ func (ns NodeSnapshot[T]) MutateSnapshotState() {
   ns.NewPoint = ns.TargetNewPoint
 }
 type Point[T Object] interface{ Object }type SnapshotPoint[T Object] struct {
-  VectorState VectorColor       T
+  VectorState Vector
+  Color       T
 }
 
 func (sp SnapshotPoint[T]) IdentifyClass() {}
