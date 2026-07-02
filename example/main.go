@@ -287,14 +287,16 @@ container.Value = BranchFactory{
     Result: isBeforeEnd
   },
   FalseBranch: DirectAction[Bool]{
-    Target: &UniversalContainer[Bool]{},       
+     Target: &UniversalContainer[Bool]{},       
 
-    Result: False{}
+     Result: False{}
   },
 }.Create()
 
-wos.ProjMethod.InjectContinuation()wos.ProjMethod.Project()return container.Value
+ wos.ProjMethod.InjectContinuation()
+ wos.ProjMethod.Project()
 
+ return container.Value
 }
 
 type ScanAction struct{
