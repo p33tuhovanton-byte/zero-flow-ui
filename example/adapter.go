@@ -9,12 +9,16 @@ import (
 	"golang.org/x/mobile/gl"
 )
 
+// CameraStateHolder инкапсулирует текущую активную проекцию нативной камеры
+type CameraStateHolder struct {
+	CurrentProjection ProjectionStrategy
+}
+
 // ============================================================================
 // АППАРАТНАЯ ТОЧКА ВХОДА (Изолированный нативный мост Android)
 // ============================================================================
 
 func main() {
-	// Создаем стартовую конфигурацию камеры и волнового вектора сканера
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 	var startScanVector Vector = WavefrontOrientedStrategy{
 		X:              Zero{},
@@ -25,7 +29,6 @@ func main() {
 	}
 
 	app.Main(func(a app.App) {
-		// Запускаем вечный реактивный автомат, полностью изолирующий канал событий
 		runHardwareLifecycleLoop(a, a.Events(), holder, nil, Zero{}, Zero{}, startScanVector)
 	})
 }
@@ -61,8 +64,6 @@ func runHardwareLifecycleLoop(a app.App, events <-chan any, holder *CameraStateH
 			ctx.ClearColor(1.0, 1.0, 1.0, 1.0)
 			ctx.Clear(gl.COLOR_BUFFER_BIT)
 
-			// ПОЛИМОРФНЫЙ ПЕРЕХОД: Передаем управление в Generic-мод нашей игры.
-			// Контекст OpenGL упаковывается в безопасный типизированный контейнер.
 			container := &UniversalContainer[Vector]{}
 			GameModLauncher{
 				GL:         ctx,
