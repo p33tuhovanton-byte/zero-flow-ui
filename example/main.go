@@ -14,14 +14,15 @@ type CameraStateHolder struct {
 }
 
 // ============================================================================
-// НАВЕДЕНИЕ ВЕЧНОГО АВТОМАТА (Изолированная граница сред)
+// НАВЕДЕНИЕ ВЕЧНОГО РЕАКТИВНОГО АВТОМАТА (Изолированная граница сред)
 // ============================================================================
 
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
 
 	app.Main(func(a app.App) {
-		runLifecycleLoop(a, a.Events(), holder, nil, Zero{}, Zero{}, WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: Zero{}, MaxY: Zero{}, DirectionDelta: Zero{}.Next()})
+		var currentScanVector Vector = WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: Zero{}, MaxY: Zero{}, DirectionDelta: Zero{}.Next()}
+		runLifecycleLoop(a, a.Events(), holder, nil, Zero{}, Zero{}, currentScanVector)
 	})
 }
 
@@ -82,7 +83,7 @@ func intToPeano(n int, current Number) Number {
 type OpenGlPixelDriver struct {
 	GL      gl.Context
 	Counter int
-	IsYAxis bool // Инкапсулирует ось ориентации
+	IsYAxis bool 
 }
 
 func (ogpd OpenGlPixelDriver) IdentifyClass() {}
@@ -90,15 +91,35 @@ func (ogpd OpenGlPixelDriver) IncrementPulse() HardwareIntegerDriver {
 	return OpenGlPixelDriver{GL: ogpd.GL, Counter: ogpd.Counter + 1, IsYAxis: ogpd.IsYAxis}
 }
 func (ogpd OpenGlPixelDriver) ExecuteHardwarePulse() {
-	// Физический сброс накопленного счетчика Пеано прямо в бинарную команду видеокарты
 	ogpd.GL.Scissor(int32(ogpd.Counter), int32(ogpd.Counter), 1, 1)
 	ogpd.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
 	ogpd.GL.Clear(gl.COLOR_BUFFER_BIT)
 }
 
+// GenericColorAcceptor — мост между обобщенным DirectAction и строгим ColorAcceptor сцены
+type GenericColorAcceptor[T GameColor] struct {
+	Target *UniversalContainer[GameColor]
+	Result T
+}
+
+func (gca GenericColorAcceptor[T]) IdentifyClass() {}
+func (gca GenericColorAcceptor[T]) Execute()       { gca.Target.Value = gca.Result }
+func (gca GenericColorAcceptor[T]) AcceptColor()   { gca.Execute() }
+
 // ============================================================================
-// КВАНТОВАННЫЙ СКАНЕР И CANVAS NODE
+// ОСТАЛЬНЫЕ КОМКИ И ИНТЕРФЕЙСЫ
 // ============================================================================
+
+type TouchPulseEvent struct{ StateHolder *CameraStateHolder }
+func (tpe TouchPulseEvent) IdentifyClass() {}
+func (tpe TouchPulseEvent) Trigger() {
+	tpe.StateHolder.CurrentProjection = tpe.StateHolder.CurrentProjection.NextOrientation()
+}
+
+type Canvas interface {
+	Object
+	ReadColor() Action
+}
 
 type NativeGameRenderEvent struct {
 	GL         gl.Context
@@ -143,6 +164,11 @@ func (ogc OpenGlCanvas) ReadColor() Action {
 	return EmptyAction{}
 }
 
+type Scanner interface {
+	Object
+	Scan()
+}
+
 type CanvasScanner struct {
 	Step    Vector
 	Canvas  Canvas
@@ -158,24 +184,28 @@ type PixelSaveAcceptor struct {
 	InjectedColor GameColor
 }
 
-func (psa PixelSaveAcceptor) AcceptColor() {
-	psa.InjectedColor.PaintHardwarePixel()
-	CanvasScanner{Step: psa.Scanner.Step.AdvanceVector(), Canvas: psa.UpdatedCanvas, Storage: NodeSnapshot[GameColor]{tail: psa.Scanner.Storage, NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}}, OutVec: psa.Scanner.OutVec}.Scan()
+func (psa PixelSaveAcceptor) IdentifyClass() {}
+func (psa PixelSaveAcceptor) Execute()       {}
+func (psa PixelSaveAcceptor) AcceptColor()   { psa.Scanner.Scan() }
+
+type DirectColorAction struct {
+	Target *PixelSaveAcceptor
+	Color  GameColor
 }
+func (dca DirectColorAction) IdentifyClass() {}
+func (dca DirectColorAction) Execute()       { dca.Target.InjectedColor = dca.Color; dca.Target.AcceptColor() }
 
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
 	glCtx := cs.Canvas.(OpenGlCanvas).GlContext
 
-	// Декларативное конструирование слоев без локальных переменных!
-	// Драйверы Пеано создаются на лету и вшиваются в структуры цвета.
 	scene := SceneNode{
-		Background: WhiteBackgroundLayer{Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
-		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
+		Background: WhiteBackgroundLayer{Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
+		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
 			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
 			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
 		}}},
-		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: DirectAction[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
+		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
 			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
 			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
 		}}},
@@ -195,8 +225,12 @@ type Vector interface {
 }
 
 type WavefrontOrientedStrategy struct {
-	X, Y, MaxX, MaxY, DirectionDelta Number
-	ProjMethod                       ProjectionStrategy
+	X              Number
+	Y              Number
+	MaxX           Number
+	MaxY           Number
+	ProjMethod     ProjectionStrategy
+	DirectionDelta Number 
 }
 
 func (wos WavefrontOrientedStrategy) IdentifyClass() {}
@@ -212,16 +246,22 @@ func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 			FalseBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
 		}.Create().Select(),
 	}.Create().Select().Execute()
+	
 	return container.Value
 }
 
 func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
 func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
 
+type WavefrontIntersectionAcceptor struct {
+	ResultTarget   *UniversalContainer[Bool]
+	ProjectedPoint Vector2D
+}
+func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
+
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
 	container := &UniversalContainer[Bool]{Value: False{}}
 	
-	// Вычисляем границы 3D куба Пеано полностью через полиморфную дифференциальную цепочку
 	container.Value = BranchFactory{
 		Condition: wos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{}).CompareWithZero(),
 		TrueBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: Zero{}.Next().Next().Next().Differentiate(wos.X, Zero{}).CompareWithZero()},
@@ -241,26 +281,38 @@ type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
 func (sa StopAction) IdentifyClass() {}
 func (sa StopAction) Execute()       {}
 
-type Snapshot[T Object] interface {
-	Object
-	Accumulate() Snapshot[T]
+type Snapshot[T Object] interface{
+  ObjectAccumulate() Snapshot[T]
 }
 
-type EmptySnapshot[T Object] struct{ NewPoint Point[T] }
-func (es EmptySnapshot[T]) IdentifyClass()         {}
-func (es EmptySnapshot[T]) Accumulate() Snapshot[T] { return NodeSnapshot[T]{head: es.NewPoint, tail: es} }
+type EmptySnapshot[T Object] struct{ 
+  NewPoint Point[T] 
+}
+
+func (es EmptySnapshot[T]) IdentifyClass(){}
+func (es EmptySnapshot[T]) Accumulate() Snapshot[T] { 
+  return NodeSnapshot[T]{head: es.NewPoint, tail: es} 
+}
 
 type NodeSnapshot[T Object] struct {
-	head     Point[T]
-	tail     Snapshot[T]
-	NewPoint Point[T]
+  head     Point[T]
+  tail     Snapshot[T]
+  NewPoint Point[T]
 }
+
 func (ns NodeSnapshot[T]) IdentifyClass()         {}
-func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { return NodeSnapshot[T]{head: ns.NewPoint, tail: ns} }
+func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { 
+  return NodeSnapshot[T]{
+    head: ns.NewPoint, 
+    tail: ns
+   } 
+}
 
 type Point[T Object] interface{ Object }
+
 type SnapshotPoint[T Object] struct {
-	VectorState Vector
-	Color       T
+  VectorState Vector
+  Color       T
 }
+
 func (sp SnapshotPoint[T]) IdentifyClass() {}
