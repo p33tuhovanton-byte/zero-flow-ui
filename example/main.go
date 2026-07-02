@@ -302,10 +302,8 @@ type NodeSnapshot[T Object] struct {
 
 func (ns NodeSnapshot[T]) IdentifyClass()         {}
 func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { 
-  return NodeSnapshot[T]{
-    head: ns.NewPoint, 
-    tail: ns
-   } 
+  return NodeSnapshot[T]{ 
+           head: ns.NewPoint, tail: ns} 
 }
 
 type Point[T Object] interface{ Object }
