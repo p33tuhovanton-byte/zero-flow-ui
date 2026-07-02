@@ -1,9 +1,7 @@
 package main
 
 type Point3D struct {
-	X Number
-	Y Number
-	Z Number
+	X, Y, Z Number
 }
 
 type ProjectionStrategy interface {
@@ -14,8 +12,7 @@ type ProjectionStrategy interface {
 }
 
 type Vector2D struct {
-	U Number
-	V Number
+	U, V Number
 }
 
 type ProjectionAcceptor interface {
@@ -106,10 +103,8 @@ func (tdol ThreeDimensionalObjectLayer) RenderPixel() Action {
 }
 
 type Composited3DScene struct {
-	Background  SceneLayer
-	Grid        SceneLayer
-	Object3D    SceneLayer
-	FinalOutput ColorAcceptor
+	Background, Grid, Object3D SceneLayer
+	FinalOutput                ColorAcceptor
 }
 func (c3ds Composited3DScene) IdentifyClass() {}
 func (c3ds Composited3DScene) RenderPixel() Action {
@@ -122,7 +117,7 @@ func (la LayerAction) IdentifyClass() {}
 func (la LayerAction) Execute()       { la.Layer.RenderPixel() }
 
 // ============================================================================
-// РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER С ОРИЕНТИРОВАННЫМ ЦИКЛОМ ТАКТОВ
+// ВАША РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER С ОРИЕНТИРОВАННЫМ ЦИКЛОМ ТАКТОВ
 // ============================================================================
 
 type Render interface {
@@ -144,7 +139,6 @@ func (fa AndroidFrame) Update()        { fa.Scene() }
 func (fa AndroidFrame) Scene()         { fa.CreateScene() }
 func (fa AndroidFrame) CreateScene()   { fa.Frame() }
 func (fa AndroidFrame) Frame() {
-	// Дифференциальный запуск: холст сканируется только по траектории градиента
 	fa.ActiveCanvas.ScanTarget.Scan()
 	fa.FrameScene()
 }
@@ -155,7 +149,7 @@ type Canvase struct {
 }
 
 func (c Canvase) IdentifyClass() {}
-func (c ...Canvase) Update()     {} // Пул заглушек под Ваш интерфейс
+func (c Canvase) Update()        {}
 func (c Canvase) Scene()         {}
 func (c Canvase) CreateScene()   {}
 func (c Canvase) Frame()         {}
