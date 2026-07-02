@@ -1,5 +1,7 @@
 package main
 
+import "golang.org/x/mobile/gl"
+
 type Point3D struct{ X, Y, Z Number }
 
 type ProjectionStrategy interface {
@@ -43,17 +45,42 @@ type GameColor interface {
 	PaintHardwarePixel()
 }
 
-type SolidWhiteColor struct{}
+// Каждая структура цвета теперь хранит низкоуровневый контекст и координаты для отрисовки точки
+type SolidWhiteColor struct {
+	GL gl.Context
+	U  int
+	V  int
+}
 func (swc SolidWhiteColor) IdentifyClass() {}
-func (swc SolidWhiteColor) PaintHardwarePixel() {}
+func (swc SolidWhiteColor) PaintHardwarePixel() {
+	// Белый фон кадра (уже залит gl.Clear, метод остается чистым Null-Object-ом)
+}
 
-type GridLineColor struct{}
+type GridLineColor struct {
+	GL gl.Context
+	U  int
+	V  int
+}
 func (glc GridLineColor) IdentifyClass() {}
-func (glc GridLineColor) PaintHardwarePixel() {}
+func (glc GridLineColor) PaintHardwarePixel() {
+	// ФИЗИЧЕСКАЯ ОТРИСОВКА СЕТКИ: Ограничиваем область пикселя и заливаем серым цветом
+	glc.GL.Scissor(int32(glc.U), int32(glc.V), 1, 1)
+	glc.GL.ClearColor(0.8, 0.8, 0.8, 1.0)
+	glc.GL.Clear(gl.COLOR_BUFFER_BIT)
+}
 
-type Object3DColor struct{}
+type Object3DColor struct {
+	GL gl.Context
+	U  int
+	V  int
+}
 func (o3c Object3DColor) IdentifyClass() {}
-func (o3c Object3DColor) PaintHardwarePixel() {}
+func (o3c Object3DColor) PaintHardwarePixel() {
+	// ФИЗИЧЕСКАЯ ОТРИСОВКА КУБА: Заливаем точку контура куба ярко-красным цветом
+	o3c.GL.Scissor(int32(o3c.U), int32(o3c.V), 2, 2)
+	o3c.GL.ClearColor(1.0, 0.0, 0.0, 1.0)
+	o3c.GL.Clear(gl.COLOR_BUFFER_BIT)
+}
 
 type TransparentColor struct{}
 func (tc TransparentColor) IdentifyClass() {}
@@ -173,7 +200,7 @@ func (fa AndroidFrame) FrameScene() { fa.NextFrame.Execute() }
 
 type Canvase struct{ ScanTarget CanvasScanner }
 func (c Canvase) IdentifyClass() {}
-func (c Canvase) Update()        {}
+func (c AppLifecycleLoop) Update()        {}
 func (c Canvase) Scene()         {}
 func (c Canvase) CreateScene()   {}
 func (c Canvase) Frame()         {}
