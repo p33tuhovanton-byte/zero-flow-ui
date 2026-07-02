@@ -173,7 +173,10 @@ func (fa AndroidFrame) FrameScene() { fa.NextFrame.Execute() }
 
 type Canvase struct{ ScanTarget CanvasScanner }
 func (c Canvase) IdentifyClass() {}
-func (c ...Canvase) Update()     {}
+
+// ИСПРАВЛЕНО: Троеточие ... полностью удалено.
+// Сигнатура метода Update() идеально пустая () и стабильная для gobind.
+func (c Canvase) Update()        {}
 func (c Canvase) Scene()         {}
 func (c Canvase) CreateScene()   {}
 func (c Canvase) Frame()         {}
