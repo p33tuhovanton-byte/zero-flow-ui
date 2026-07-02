@@ -10,6 +10,7 @@ type ProjectionStrategy interface {
 	Object
 	Project() Action
 	NextOrientation() ProjectionStrategy
+	InjectContinuation() // Идеально пустой метод настройки акцептора
 }
 
 type Vector2D struct {
@@ -32,6 +33,7 @@ func (tvp TopViewProjection) Project() Action {
 	return EmptyAction{}
 }
 func (tvp TopViewProjection) NextOrientation() ProjectionStrategy { return SideViewProjection{} }
+func (tvp TopViewProjection) InjectContinuation()                 {}
 
 type SideViewProjection struct {
 	Vertex       Point3D
@@ -44,6 +46,7 @@ func (svp SideViewProjection) Project() Action {
 	return EmptyAction{}
 }
 func (svp SideViewProjection) NextOrientation() ProjectionStrategy { return TopViewProjection{} }
+func (svp SideViewProjection) InjectContinuation()                 {}
 
 type GameColor interface{ Object }
 type SolidWhiteColor struct{}
