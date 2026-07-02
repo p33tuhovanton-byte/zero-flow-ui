@@ -1,25 +1,4 @@
-func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
-	container := &BoolContainer{Value: False{}}
-	
-	// Полностью удален сломанный вызов hrs.ProjMethod.Select().
-	// Создание 3D-точки и ее проекция распределяются на базе полиморфного 
-	// контракта ProjectionStrategy. Сигнатуры остаются абсолютно пустыми ().
-	var activeProjector ProjectionStrategy
-	if hrs.ProjMethod.Class() == "TopViewProjection" {
-		activeProjector = TopViewProjection{
-			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
-			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
-		}
-	} else {
-		activeProjector = SideViewProjection{
-			Vertex:       Point3D{X: hrs.X, Y: hrs.Y, Z: hrs.X},
-			Continuation: CubeIntersectionAcceptor{ScannerCoords: hrs, ResultTarget: container},
-		}
-	}
-
-	activeProjector.Project()
-	return container.Value
-}package main
+package main
 
 import (
 	"golang.org/x/mobile/app"
@@ -30,7 +9,9 @@ import (
 	"golang.org/x/mobile/gl"
 )
 
-type CameraStateHolder struct{ CurrentProjection ProjectionStrategy }
+type CameraStateHolder struct {
+	CurrentProjection ProjectionStrategy
+}
 
 func main() {
 	holder := &CameraStateHolder{CurrentProjection: TopViewProjection{}}
@@ -48,7 +29,9 @@ func main() {
 					TouchPulseEvent{StateHolder: holder}.Trigger()
 				}
 			case paint.Event:
-				if glCtx == nil { continue }
+				if glCtx == nil {
+					continue
+				}
 				InitPeanoFactory{LimitX: screenWidth, LimitY: screenHeight, OnReady: GameLauncherAcceptor{GL: glCtx, Holder: holder}}.StartBuild()
 				a.Publish()
 			}
@@ -57,10 +40,11 @@ func main() {
 }
 
 type InitPeanoFactory struct {
-	LimitX, LimitY int
+	LimitX, LimitY  int
 	Current, SavedX Number
 	OnReady         GameLauncherAcceptor
 }
+
 func (ipf InitPeanoFactory) StartBuild() { ipf.BuildX() }
 func (ipf InitPeanoFactory) BuildX() {
 	if ipf.LimitX <= 0 {
@@ -78,18 +62,22 @@ func (ipf InitPeanoFactory) BuildY() {
 }
 
 type GameLauncherAcceptor struct {
-	GL       gl.Context
-	Holder   *CameraStateHolder
-	WidthNum Number
+	GL        gl.Context
+	Holder    *CameraStateHolder
+	WidthNum  Number
 	HeightNum Number
 }
+
 func (gla GameLauncherAcceptor) Launch() {
 	NativeGameRenderEvent{GL: gla.GL, Width: gla.WidthNum, Height: gla.HeightNum, Projection: gla.Holder.CurrentProjection}.Trigger()
 }
 
 type TouchPulseEvent struct{ StateHolder *CameraStateHolder }
+
 func (tpe TouchPulseEvent) IdentifyClass() {}
-func (tpe TouchPulseEvent) Trigger() { tpe.StateHolder.CurrentProjection = tpe.StateHolder.CurrentProjection.NextOrientation() }
+func (tpe TouchPulseEvent) Trigger() {
+	tpe.StateHolder.CurrentProjection = tpe.StateHolder.CurrentProjection.NextOrientation()
+}
 
 type Canvas interface {
 	Object
@@ -102,11 +90,12 @@ type NativeGameRenderEvent struct {
 	Height     Number
 	Projection ProjectionStrategy
 }
+
 func (ngre NativeGameRenderEvent) IdentifyClass() {}
 func (ngre NativeGameRenderEvent) Trigger() {
 	CanvasScanner{
-		Step: HorizontalRowStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection},
-		Canvas: OpenGlCanvas{GlContext: ngre.GL},
+		Step:    HorizontalRowStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection},
+		Canvas:  OpenGlCanvas{GlContext: ngre.GL},
 		Storage: EmptySnapshot[GameColor]{},
 	}.Scan()
 }
@@ -115,6 +104,7 @@ type OpenGlCanvas struct {
 	GlContext gl.Context
 	Scene     Composited3DScene
 }
+
 func (ogc OpenGlCanvas) IdentifyClass() {}
 func (ogc OpenGlCanvas) ReadColor() Action {
 	ogc.Scene.RenderPixel()
@@ -131,6 +121,7 @@ type CanvasScanner struct {
 	Canvas  Canvas
 	Storage Snapshot[GameColor]
 }
+
 func (cs CanvasScanner) IdentifyClass() {}
 
 type PixelSaveAcceptor struct {
@@ -138,19 +129,24 @@ type PixelSaveAcceptor struct {
 	UpdatedCanvas OpenGlCanvas
 	InjectedColor GameColor
 }
+
 func (psa PixelSaveAcceptor) AcceptColor() {
 	CanvasScanner{
-		Step: psa.Scanner.Step.AdvanceVector(),
+		Step:   psa.Scanner.Step.AdvanceVector(),
 		Canvas: psa.UpdatedCanvas,
-		Storage: NodeSnapshot[GameColor]{tail: psa.Scanner.Storage, NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}}.Accumulate(),
+		Storage: NodeSnapshot[GameColor]{
+			tail:     psa.Scanner.Storage,
+			NewPoint: SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor},
+		}.Accumulate(),
 	}.Scan()
 }
+
 func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
 	scene := Composited3DScene{
-		Background: WhiteBackgroundLayer{Output: saveAcceptor},
-		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
-		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: saveAcceptor},
+		Background:  WhiteBackgroundLayer{Output: saveAcceptor},
+		Grid:        CoordinateGridLayer{CurrentStep: cs.Step, Output: saveAcceptor},
+		Object3D:    ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: saveAcceptor},
 		FinalOutput: saveAcceptor,
 	}
 	saveAcceptor.UpdatedCanvas.Scene = scene
@@ -172,6 +168,7 @@ type HorizontalRowStrategy struct {
 	MaxY       Number
 	ProjMethod ProjectionStrategy
 }
+
 func (hrs HorizontalRowStrategy) IdentifyClass() {}
 
 type VectorContainer struct{ Value Vector }
@@ -179,8 +176,8 @@ type VectorContainer struct{ Value Vector }
 func (hrs HorizontalRowStrategy) AdvanceVector() Vector {
 	container := &VectorContainer{}
 	BranchFactory{
-		Condition: Zero{CompareTarget: hrs.X.Next()}.CheckEquality(),
-		TrueBranch: DirectVectorAction{Target: container, Result: HorizontalRowStrategy{X: Zero{}, Y: hrs.Y.Next(), MaxX: hrs.MaxX, MaxY: hrs.MaxY, ProjMethod: hrs.ProjMethod}},
+		Condition:   Zero{CompareTarget: hrs.X.Next()}.CheckEquality(),
+		TrueBranch:  DirectVectorAction{Target: container, Result: HorizontalRowStrategy{X: Zero{}, Y: hrs.Y.Next(), MaxX: hrs.MaxX, MaxY: hrs.MaxY, ProjMethod: hrs.ProjMethod}},
 		FalseBranch: DirectVectorAction{Target: container, Result: HorizontalRowStrategy{X: hrs.X.Next(), Y: hrs.Y, MaxX: hrs.MaxX, MaxY: hrs.MaxY, ProjMethod: hrs.ProjMethod}},
 	}.Create().Select().Execute()
 	return container.Value
@@ -190,6 +187,7 @@ type DirectVectorAction struct {
 	Target *VectorContainer
 	Result Vector
 }
+
 func (dva DirectVectorAction) IdentifyClass() {}
 func (dva DirectVectorAction) Execute()       { dva.Target.Value = dva.Result }
 
@@ -197,20 +195,20 @@ func (hrs HorizontalRowStrategy) IsCanvasFinished() Bool   { return Zero{Compare
 func (hrs HorizontalRowStrategy) IsGridIntersection() Bool { return hrs.X.IsMultipleOfGrid() }
 
 type CubeIntersectionAcceptor struct {
-	ScannerCoords HorizontalRowStrategy
-	ResultTarget  *BoolContainer
+	ScannerCoords  HorizontalRowStrategy
+	ResultTarget   *BoolContainer
 	ProjectedPoint Vector2D
 }
-func (cia CubeIntersectionAcceptor) AcceptProjection() { cia.ResultTarget.Value = cia.ProjectedPoint.U.CheckEquality() }
+
+func (cia CubeIntersectionAcceptor) AcceptProjection() {
+	cia.ResultTarget.Value = cia.ProjectedPoint.U.CheckEquality()
+}
 
 type BoolContainer struct{ Value Bool }
 
 func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
-	
-	// Полностью удален сломанный вызов hrs.ProjMethod.Select().
-	// Создание 3D-точки и ее проекция распределяются на базе полиморфного 
-	// контракта ProjectionStrategy. Сигнатуры остаются абсолютно пустыми ().
+
 	var activeProjector ProjectionStrategy
 	if hrs.ProjMethod.Class() == "TopViewProjection" {
 		activeProjector = TopViewProjection{
@@ -228,14 +226,13 @@ func (hrs HorizontalRowStrategy) IsIntersecting3D() Bool {
 	return container.Value
 }
 
-	activeProjector.Project()
-	return container.Value
-}
 type ScanAction struct{ Scanner CanvasScanner }
+
 func (sa ScanAction) IdentifyClass() {}
 func (sa ScanAction) Execute()       { sa.Scanner.Canvas.ReadColor() }
 
 type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
+
 func (sa StopAction) IdentifyClass() {}
 func (sa StopAction) Execute()       {}
 
@@ -245,20 +242,23 @@ type Snapshot[T Object] interface {
 }
 
 type EmptySnapshot[T Object] struct{ NewPoint Point[T] }
-func (es EmptySnapshot[T]) IdentifyClass() {}
-func (es EmptySnapshot[T]) Accumulate() Snapshot[T]             { return NodeSnapshot[T]{head: es.NewPoint, tail: es} }
+
+func (es EmptySnapshot[T]) IdentifyClass()         {}
+func (es EmptySnapshot[T]) Accumulate() Snapshot[T] { return NodeSnapshot[T]{head: es.NewPoint, tail: es} }
 
 type NodeSnapshot[T Object] struct {
 	head     Point[T]
 	tail     Snapshot[T]
 	NewPoint Point[T]
 }
-func (ns NodeSnapshot[T]) IdentifyClass() {}
-func (ns NodeSnapshot[T]) Accumulate() Snapshot[T]             { return NodeSnapshot[T]{head: ns.NewPoint, tail: ns} }
+
+func (ns NodeSnapshot[T]) IdentifyClass()         {}
+func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { return NodeSnapshot[T]{head: ns.NewPoint, tail: ns} }
 
 type Point[T Object] interface{ Object }
 type SnapshotPoint[T Object] struct {
 	VectorState Vector
 	Color       T
 }
+
 func (sp SnapshotPoint[T]) IdentifyClass() {}
