@@ -1,5 +1,18 @@
 package main
 
+// ============================================================================
+// ВАШИ КОРНЕВЫЕ КОНТРАКТЫ (Соблюдение пустых сигнатур)
+// ============================================================================
+
+type Render interface {
+	Object
+	Update()
+	Scene()
+	CreateScene()
+	Frame()
+	FrameScene()
+}
+
 type Point3D struct {
 	X Number
 	Y Number
@@ -10,7 +23,7 @@ type ProjectionStrategy interface {
 	Object
 	Project() Action
 	NextOrientation() ProjectionStrategy
-	InjectContinuation() // Идеально пустой метод настройки акцептора
+	InjectContinuation()
 }
 
 type Vector2D struct {
@@ -29,7 +42,7 @@ type TopViewProjection struct {
 
 func (tvp TopViewProjection) IdentifyClass() {}
 func (tvp TopViewProjection) Project() Action {
-	tvp.Continuation.AcceptProjection() 
+	tvp.Continuation.AcceptProjection()
 	return EmptyAction{}
 }
 func (tvp TopViewProjection) NextOrientation() ProjectionStrategy { return SideViewProjection{} }
@@ -109,3 +122,55 @@ func (c3ds Composited3DScene) RenderPixel() Action {
 type LayerAction struct{ Layer SceneLayer }
 func (la LayerAction) IdentifyClass() {}
 func (la LayerAction) Execute()       { la.Layer.RenderPixel() }
+
+// ============================================================================
+// ВАША РЕАЛИЗАЦИЯ ИНТЕРФЕЙСА RENDER (CPS-Поток выполнения)
+// ============================================================================
+
+type AndroidFrame struct {
+	// Инкапсулируем контекст рендеринга и стратегию смены кадров
+	ActiveCanvas Canvase
+	NextFrame    Action
+}
+
+func (fa AndroidFrame) IdentifyClass() {}
+
+func (fa AndroidFrame) Update() {
+	// Шаг 1: Обновление физических состояний сцены. 
+	// Импульс передается дальше по цепочке в метод Scene()
+	fa.Scene()
+}
+
+func (fa AndroidFrame) Scene() {
+	// Шаг 2: Проверка готовности или инициализация слоев сцены кадра
+	fa.CreateScene()
+}
+
+func (fa AndroidFrame) CreateScene() {
+	// Шаг 3: Фиксация геометрии объектов перед отрисовкой кадра
+	fa.Frame()
+}
+
+func (fa AndroidFrame) Frame() {
+	// Шаг 4: Передача управления объекту Canvase для точечного сканирования экрана
+	fa.ActiveCanvas.ScanTarget.Scan()
+	fa.FrameScene()
+}
+
+func (fa AndroidFrame) FrameScene() {
+	// Шаг 5: Кадр полностью завершен и отправлен в GPU. 
+	// Триггерим продолжение (NextFrame) игрового цикла.
+	fa.NextFrame.Execute()
+}
+
+type Canvase struct {
+	// Инкапсулирует робота-сканера, который будет попиксельно вычислять цвета слоев
+	ScanTarget CanvasScanner
+}
+
+func (c Canvase) IdentifyClass() {}
+func (c Canvase) Update()        { c.ScanTarget.Scan() }
+func (c Canvase) Scene()         {}
+func (c Canvase) CreateScene()   {}
+func (c Canvase) Frame()         {}
+func (c Canvase) FrameScene()    {}
