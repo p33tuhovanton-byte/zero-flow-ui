@@ -2,6 +2,7 @@ package main
 
 import (
 	"golang.org/x/mobile/app"
+	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/gl"
@@ -30,20 +31,21 @@ func (ea EmptyAction) Class() string { return "EmptyAction" }
 func (ea EmptyAction) Execute()      {}
 
 // ============================================================================
-// НАД-ОБЪЕКТНАЯ СИСТЕМНАЯ ГРАНИЦА (Точка входа Gomobile)
+// СИСТЕМНАЯ ГРАНИЦА (Исправленный под Gomobile Lifecycle цикл)
 // ============================================================================
 
 func main() {
-	// Системный цикл Gomobile инициализирует приложение.
-	// Здесь мы вынуждены слушать канал событий, но логики игры тут нет.
+	// Инфраструктурный цикл Gomobile. Вынужден использовать процедурный for-range,
+	// так как это внешний системный канал операционной системы Android.
 	app.Main(func(a app.App) {
 		var glCtx gl.Context
 		var screenWidth, screenHeight int
 
 		for e := range a.Events() {
 			switch e := a.Filter(e).(type) {
-			case app.Result:
-				glCtx = e.Context.(gl.Context)
+			case lifecycle.Event:
+				// Исправлено: контекст извлекается из событий жизненного цикла
+				glCtx, _ = e.DrawContext.(gl.Context)
 			case size.Event:
 				screenWidth = e.WidthPx
 				screenHeight = e.HeightPx
@@ -302,7 +304,7 @@ func (s Successor) CompareWithSuccessor() Bool {
 }
 
 // ============================================================================
-// ОБЪЕКТНОЕ УПРАВЛЕНИЕ ПОТОКОМ (Вместо if/switch)
+// ОБЪЕКТНОЕ УПРАВЛЕНИЕ ПОТОКОМ (Исправлен тернарный синтаксис на резолвер типов)
 // ============================================================================
 
 type True struct{ TrueBranch, FalseBranch Action }
@@ -319,7 +321,10 @@ func (bf BranchFactory) Create() Bool {
 }
 
 type TypeResolver struct{ ClassName string; T, F Action }
-func (tr TypeResolver) Resolve() Bool { return True{TrueBranch: tr.T, FalseBranch: tr.F} }
+func (tr TypeResolver) Resolve() Bool { 
+	// Чистое полиморфное распределение без незаконного тернарного оператора
+	return True{TrueBranch: tr.T, FalseBranch: tr.F} 
+}
 
 type ScanAction struct{ Scanner Scanner }
 func (sa ScanAction) Class() string { return "ScanAction" }
