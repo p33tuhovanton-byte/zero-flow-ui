@@ -251,18 +251,30 @@ func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 	return container.Value
 }
 
-func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
-func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
+func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   {
+ return Zero{CompareTarget: wos.Y}.CheckEquality() 
+}
 
-type WavefrontIntersectionAcceptor struct {
+func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool {
+ return wos.X.IsMultipleOfGrid()
+}
+
+type WavefrontIntersectionAcceptor struct
+{
 	ResultTarget   *UniversalContainer[Bool]
 	ProjectedPoint Vector2D
 }
-func (wia WavefrontIntersectionAcceptor) AcceptProjection() { wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() }
+
+func (wia WavefrontIntersectionAcceptor) AcceptProjection() { 
+  wia.ResultTarget.Value = wia.ProjectedPoint.U.CheckEquality() 
+}
 
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
+  
   container := &UniversalContainer[Bool]{Value: False{}}
-  cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()c  ubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
+  
+  cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
+ cubeEnd := cubeStart.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 
 isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()isBeforeEnd := cubeEnd.Differentiate(wos.X, Zero{}).CompareWithZero()
 
@@ -282,9 +294,13 @@ wos.ProjMethod.InjectContinuation()wos.ProjMethod.Project()return container.Valu
 type ScanAction struct{
   Scanner CanvasScanner 
 }
-func (sa ScanAction) IdentifyClass() {}func (sa ScanAction) Execute()       {
-sa.Scanner.Canvas.ReadColor() 
+
+func (sa ScanAction) IdentifyClass() {}
+
+func (sa ScanAction) Execute()       {
+  sa.Scanner.Canvas.ReadColor() 
 }
+
 type StopAction struct{
   FinalSnapshot Snapshot[GameColor] 
 }
