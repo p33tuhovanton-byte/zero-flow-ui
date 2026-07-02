@@ -266,8 +266,7 @@ func (wia WavefrontIntersectionAcceptor) AcceptProjection() {
 }
 
 func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
-  container := UniversalContainer[Bool]{Value: False{}
-}
+  container := UniversalContainer[Bool]{Value: False{}}
 
 cubeStart := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
 
