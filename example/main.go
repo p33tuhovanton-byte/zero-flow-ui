@@ -96,7 +96,6 @@ func (ogpd OpenGlPixelDriver) ExecuteHardwarePulse() {
 	ogpd.GL.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-// GenericColorAcceptor — мост между обобщенным DirectAction и строгим ColorAcceptor сцены
 type GenericColorAcceptor[T GameColor] struct {
 	Target *UniversalContainer[GameColor]
 	Result T
@@ -186,7 +185,33 @@ type PixelSaveAcceptor struct {
 
 func (psa PixelSaveAcceptor) IdentifyClass() {}
 func (psa PixelSaveAcceptor) Execute()       {}
-func (psa PixelSaveAcceptor) AcceptColor()   { psa.Scanner.Scan() }
+func (psa PixelSaveAcceptor) AcceptColor() {
+	container := &UniversalContainer[Snapshot[GameColor]]{}
+	
+	// ИСПРАВЛЕНО: Все зависимости (новая точка и цель вывода) инкапсулированы 
+	// прямо внутрь стейта самой коллекции перед вызовом. Аргументы отсутствуют ().
+	activeSnapshot := psa.Scanner.Storage
+	
+	// Для NodeSnapshot или EmptySnapshot мы подмешиваем новые поля динамически
+	if node, ok := activeSnapshot.(NodeSnapshot[GameColor]); ok {
+		node.NewPoint = SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}
+		node.AcceptorTarget = container
+		activeSnapshot = node
+	} else if empty, ok := activeSnapshot.(EmptySnapshot[GameColor]); ok {
+		empty.NewPoint = SnapshotPoint[GameColor]{VectorState: psa.Scanner.Step, Color: psa.InjectedColor}
+		empty.AcceptorTarget = container
+		activeSnapshot = empty
+	}
+
+	activeSnapshot.Accumulate()
+
+	CanvasScanner{
+		Step:    psa.Scanner.Step.AdvanceVector(),
+		Canvas:  psa.UpdatedCanvas,
+		Storage: container.Value,
+		OutVec:  psa.Scanner.OutVec,
+	}.Scan()
+}
 
 type DirectColorAction struct {
 	Target *PixelSaveAcceptor
@@ -246,7 +271,6 @@ func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 			FalseBranch: DirectAction[Vector]{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
 		}.Create().Select(),
 	}.Create().Select().Execute()
-	
 	return container.Value
 }
 
@@ -281,36 +305,39 @@ type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
 func (sa StopAction) IdentifyClass() {}
 func (sa StopAction) Execute()       {}
 
-type Snapshot[T Object] interface{
-  ObjectAccumulate() Snapshot[T]
+// ============================================================================
+// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Идеальные пустые сигнатуры методов)
+// ============================================================================
+
+type Snapshot[T Object] interface {
+	Object
+	// ИСПРАВЛЕНО: Полное уничтожение входных аргументов. Сигнатура идеально чиста ()
+	Accumulate()
 }
 
-type EmptySnapshot[T Object] struct{ 
-  NewPoint Point[T] 
+type EmptySnapshot[T Object] struct {
+	NewPoint       Point[T]
+	AcceptorTarget *UniversalContainer[Snapshot[T]]
 }
-
-func (es EmptySnapshot[T]) IdentifyClass(){}
-func (es EmptySnapshot[T]) Accumulate() Snapshot[T] { 
-  return NodeSnapshot[T]{head: es.NewPoint, tail: es} 
+func (es EmptySnapshot[T]) IdentifyClass() {}
+func (es EmptySnapshot[T]) Accumulate() {
+	es.AcceptorTarget.Value = NodeSnapshot[T]{head: es.NewPoint, tail: es}
 }
 
 type NodeSnapshot[T Object] struct {
-  head     Point[T]
-  tail     Snapshot[T]
-  NewPoint Point[T]
+	head           Point[T]
+	tail           Snapshot[T]
+	NewPoint       Point[T]
+	AcceptorTarget *UniversalContainer[Snapshot[T]]
 }
-
-func (ns NodeSnapshot[T]) IdentifyClass()         {}
-func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] { 
-  return NodeSnapshot[T]{ 
-           head: ns.NewPoint, tail: ns} 
+func (ns NodeSnapshot[T]) IdentifyClass() {}
+func (ns NodeSnapshot[T]) Accumulate() {
+	ns.AcceptorTarget.Value = NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
 }
 
 type Point[T Object] interface{ Object }
-
 type SnapshotPoint[T Object] struct {
-  VectorState Vector
-  Color       T
+	VectorState Vector
+	Color       T
 }
-
 func (sp SnapshotPoint[T]) IdentifyClass() {}
