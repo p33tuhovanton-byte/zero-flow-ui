@@ -1,11 +1,16 @@
 package main
 
+// ============================================================================
+// ОБОБЩЕННЫЕ КОРНЕВЫЕ КОНТРАКТЫ (Generics без any)
+// ============================================================================
+
 type Object interface {
 	IdentifyClass()
 }
 
-type ClassConsumer interface {
-	AcceptClassName()
+type Node interface {
+	Object
+	ProcessNode() Action
 }
 
 type Action interface {
@@ -22,6 +27,24 @@ type EmptyAction struct{}
 
 func (ea EmptyAction) IdentifyClass() {}
 func (ea EmptyAction) Execute()       {}
+
+// UniversalContainer инкапсулирует результат вычисления любого типа T, расширяющего Object
+type UniversalContainer[T Object] struct {
+	Value T
+}
+
+// DirectAction — обобщенная CPS-команда, избавляющая от десятков мелких структур
+type DirectAction[T Object] struct {
+	Target *UniversalContainer[T]
+	Result T
+}
+
+func (da DirectAction[T]) IdentifyClass() {}
+func (da DirectAction[T]) Execute()       { da.Target.Value = da.Result }
+
+// ============================================================================
+// АРИФМЕТИКА ПЕАНО НА УНИВЕРСАЛЬНЫХ ШАБЛОНАХ
+// ============================================================================
 
 type Number interface {
 	Object
@@ -70,56 +93,46 @@ func (s Successor) IsMultipleOfGrid() Bool {
 }
 
 func (s Successor) EvaluateGridStep(currentStep Number) Bool {
-	return BranchFactory{
+	container := &UniversalContainer[Bool]{}
+	BranchFactory{
 		Condition: currentStep.CompareWithZero(),
-		TrueBranch: DirectBoolAction{Result: s.IsMultipleOfGrid()},
-		FalseBranch: DirectBoolAction{Result: BranchFactory{
+		TrueBranch: DirectAction[Bool]{Target: container, Result: s.IsMultipleOfGrid()},
+		FalseBranch: DirectAction[Bool]{Target: container, Result: BranchFactory{
 			Condition: s.pred.CompareWithZero(),
-			TrueBranch: DirectBoolAction{Result: False{}},
-			FalseBranch: DirectBoolAction{Result: s.pred.EvaluateGridStep(currentStep.(Successor).pred)},
+			TrueBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: False{}},
+			FalseBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: s.pred.EvaluateGridStep(currentStep.(Successor).pred)},
 		}.Create()},
 	}.Create()
+	return container.Value
 }
 
 func (s Successor) Differentiate(other Number, accumulator Number) Number {
-	return BranchFactory{
+	container := &UniversalContainer[Number]{}
+	BranchFactory{
 		Condition: other.CompareWithZero(),
-		TrueBranch: DirectNumberAction{Result: s},
-		FalseBranch: DirectNumberAction{Result: s.pred.Differentiate(other.(SimpleSuccessorResolver).GetPred(), accumulator.Next())},
-	}.Create()
+		TrueBranch: DirectAction[Number]{Target: container, Result: s},
+		FalseBranch: DirectAction[Number]{Target: container, Result: s.pred.Differentiate(other.(SimpleSuccessorResolver).GetPred(), accumulator.Next())},
+	}.Create().Select().Execute()
+	return container.Value
 }
 
-type SimpleSuccessorResolver interface { GetPred() Number }
+type SimpleSuccessorResolver interface{ GetPred() Number }
 func (s Successor) GetPred() Number { return s.pred }
 
 func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
 	distance := maxX.Differentiate(s, Zero{})
-	return BranchFactory{
+	container := &UniversalContainer[Bool]{}
+	BranchFactory{
 		Condition: distance.Differentiate(threshold, Zero{}).CompareWithZero(),
-		TrueBranch: DirectBoolAction{Result: True{}},
-		FalseBranch: DirectBoolAction{Result: False{}},
+		TrueBranch: DirectAction[Bool]{Target: container, Result: True{}},
+		FalseBranch: DirectAction[Bool]{Target: container, Result: False{}},
 	}.Create()
+	return container.Value
 }
 
-type DirectBoolAction struct{ Result Bool }
-func (dba DirectBoolAction) IdentifyClass() {}
-func (dba DirectBoolAction) Execute()       {}
-func (dba DirectBoolAction) GetBool() Bool  { return dba.Result }
-
-type DirectNumberAction struct{ Result Number }
-func (dna DirectNumberAction) IdentifyClass() {}
-func (dna DirectNumberAction) Execute()       {}
-func (dna DirectNumberAction) GetNumber() Number { return dna.Result }
-
-type NumberAction interface {
-	Action
-	GetNumber() Number
-}
-
-type BoolAction interface {
-	Action
-	GetBool() Bool
-}
+// ============================================================================
+// ПОЛИМОРФНЫЕ ВЕТВЛЕНИЯ СИСТЕМЫ
+// ============================================================================
 
 type True struct{ TrueBranch, FalseBranch Action }
 
@@ -139,9 +152,19 @@ type BranchFactory struct {
 	FalseBranch Action
 }
 
-// ИСПРАВЛЕНО: Полное удаление Class() и контейнеров.
-// Объект Bool полиморфно активирует либо TrueBranch, либо FalseBranch через свой внутренний Select()
 func (bf BranchFactory) Create() Bool {
+	container := &UniversalContainer[Bool]{}
+	TypeResolver{ClassName: bf.Condition.Class(), T: bf.TrueBranch, F: bf.FalseBranch, Target: container}.Resolve()
 	bf.Condition.Select().Execute()
 	return bf.Condition
+}
+
+type TypeResolver struct {
+	ClassName string
+	T, F      Action
+	Target    *UniversalContainer[Bool]
+}
+
+func (tr TypeResolver) Resolve() {
+	tr.Target.Value = True{TrueBranch: tr.T, FalseBranch: tr.F}
 }
