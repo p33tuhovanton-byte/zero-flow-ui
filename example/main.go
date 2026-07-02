@@ -31,8 +31,8 @@ func runLifecycleLoop(events <-chan any, holder *CameraStateHolder, ctx gl.Conte
 	}
 	evSize, okSize := raw.(size.Event)
 	if okSize {
-		newW := intToPeano(okSize.WidthPx, Zero{}) // Исправлено приведение типов размера
-		newH := intToPeano(okSize.HeightPx, Zero{})
+		newW := intToPeano(evSize.WidthPx, Zero{})
+		newH := intToPeano(evSize.HeightPx, Zero{})
 		runLifecycleLoop(events, holder, ctx, newW, newH)
 		return
 	}
@@ -96,8 +96,10 @@ func (ngre NativeGameRenderEvent) Trigger() {
 	ngre.GL.ClearColor(1.0, 1.0, 1.0, 1.0)
 	ngre.GL.Clear(gl.COLOR_BUFFER_BIT)
 
+	// Инициализируем дифференциальный волновой сканер. 
+	// Шаг DirectionDelta равен единичному Successor, но будет динамически сжиматься в фокусе.
 	CanvasScanner{
-		Step:    DifferentialOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection, DirectionDelta: Zero{}.Next()},
+		Step:    WavefrontOrientedStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection, DirectionDelta: Zero{}.Next()},
 		Canvas:  OpenGlCanvas{GlContext: ngre.GL},
 		Storage: EmptySnapshot[GameColor]{},
 	}.Scan()
@@ -173,30 +175,42 @@ type Vector interface {
 	IsIntersecting3D() Bool
 }
 
-// DifferentialOrientedStrategy — Дифференциальный ориентированный сканер Canvas.
-// Направление и шаг (DirectionDelta) меняются динамически на базе производной сцены.
-type DifferentialOrientedStrategy struct {
+// WavefrontOrientedStrategy — Волновой дифференциальный ориентированный сканер.
+// Движение идет непрерывным фронтом, замедляясь посередине и ближе к правому нижнему углу кадра.
+type WavefrontOrientedStrategy struct {
 	X              Number
 	Y              Number
 	MaxX           Number
 	MaxY           Number
 	ProjMethod     ProjectionStrategy
-	DirectionDelta Number // Текущий дифференциальный вектор направления шага
+	DirectionDelta Number 
 }
 
-func (dos DifferentialOrientedStrategy) IdentifyClass() {}
+func (wos WavefrontOrientedStrategy) IdentifyClass() {}
 
 type VectorContainer struct{ Value Vector }
 
-func (dos DifferentialOrientedStrategy) AdvanceVector() Vector {
+func (wos WavefrontOrientedStrategy) AdvanceVector() Vector {
 	container := &VectorContainer{}
-	// Робот вычисляет разность (дифференциал) между текущим положением и границами 3D-модели.
-	// Если изменений нет, DirectionDelta разворачивается в прыжковый шаг (Jump Vector), минуя пустые блоки за О(1).
+	
+	// Вычисляем порог (threshold) центра/правого края через вложенность Пеано кадра
+	midThreshold := Zero{}.Next().Next().Next().Next().Next()
+
+	// ДИФФЕРЕНЦИАЛЬНАЯ ПЕРЕОРИЕНТАЦИЯ: Объект числа сам вычисляет, 
+	// находимся ли мы посередине или ближе к правому углу.
+	// Если да — шаг DirectionDelta сжимается, уплотняя скан. Иначе — летит широкой волной.
 	BranchFactory{
-		Condition:   Zero{CompareTarget: dos.X.Next()}.CheckEquality(),
-		TrueBranch:  DirectVectorAction{Target: container, Result: DifferentialOrientedStrategy{X: Zero{}, Y: dos.Y.Next(), MaxX: dos.MaxX, MaxY: dos.MaxY, ProjMethod: dos.ProjMethod, DirectionDelta: Zero{}.Next()}},
-		FalseBranch: DirectVectorAction{Target: container, Result: DifferentialOrientedStrategy{X: dos.X.Next(), Y: dos.Y, MaxX: dos.MaxX, MaxY: dos.MaxY, ProjMethod: dos.ProjMethod, DirectionDelta: dos.DirectionDelta}},
+		Condition: wos.X.EvaluateWaveCenter(wos.MaxX, midThreshold),
+		// True Ветка: Мы посередине или справа! Сжимаем шаг до высокоточного скана
+		TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
+		// False Ветка: Далекая периферия. Продвигаем волновой фронт с широким прыжком
+		FalseBranch: BranchFactory{
+			Condition:  Zero{CompareTarget: wos.X.Next()}.CheckEquality(),
+			TrueBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: Zero{}, Y: wos.Y.Next(), MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: Zero{}.Next()}},
+			FalseBranch: DirectVectorAction{Target: container, Result: WavefrontOrientedStrategy{X: wos.X.Next(), Y: wos.Y, MaxX: wos.MaxX, MaxY: wos.MaxY, ProjMethod: wos.ProjMethod, DirectionDelta: wos.DirectionDelta}},
+		}.Create().Select(),
 	}.Create().Select().Execute()
+	
 	return container.Value
 }
 
@@ -207,8 +221,8 @@ type DirectVectorAction struct {
 func (dva DirectVectorAction) IdentifyClass() {}
 func (dva DirectVectorAction) Execute()       { dva.Target.Value = dva.Result }
 
-func (dos DifferentialOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: dos.Y}.CheckEquality() }
-func (dos DifferentialOrientedStrategy) IsGridIntersection() Bool { return dos.X.IsMultipleOfGrid() }
+func (wos WavefrontOrientedStrategy) IsCanvasFinished() Bool   { return Zero{CompareTarget: wos.Y}.CheckEquality() }
+func (wos WavefrontOrientedStrategy) IsGridIntersection() Bool { return wos.X.IsMultipleOfGrid() }
 
 type CubeIntersectionAcceptor struct {
 	ScannerCoords  HorizontalRowStrategy
@@ -219,24 +233,16 @@ func (cia CubeIntersectionAcceptor) AcceptProjection() { cia.ResultTarget.Value 
 
 type BoolContainer struct{ Value Bool }
 
-func (dos DifferentialOrientedStrategy) IsIntersecting3D() Bool {
+func (wos WavefrontOrientedStrategy) IsIntersecting3D() Bool {
 	container := &BoolContainer{Value: False{}}
-	
-	// Дифференциальное исчисление: вычисляем расстояние (производную вектора) до объекта куба
-	cubeEdgeDistance := dos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{})
-	
+	cubeEdgeDistance := wos.X.Differentiate(Zero{}.Next().Next().Next(), Zero{})
 	container.Value = cubeEdgeDistance.CheckEquality()
 	
 	var dynamicProjector ProjectionStrategy
-	dynamicProjector = dos.ProjMethod
+	dynamicProjector = wos.ProjMethod
 	dynamicProjector.InjectContinuation()
 	dynamicProjector.Project()
 	return container.Value
-}
-
-type NumberAction struct {
-	EmptyAction
-	ResultNum Number
 }
 
 type ScanAction struct{ Scanner CanvasScanner }
