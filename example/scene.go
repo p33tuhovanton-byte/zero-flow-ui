@@ -1,7 +1,5 @@
 package main
 
-import "golang.org/x/mobile/gl"
-
 type Point3D struct{ X, Y, Z Number }
 
 type ProjectionStrategy interface {
@@ -45,7 +43,6 @@ type GameColor interface {
 	PaintHardwarePixel()
 }
 
-// Нативные драйверы полностью инкапсулировали примитивы внутри себя (Правило №5)
 type SolidWhiteColor struct{}
 func (swc SolidWhiteColor) IdentifyClass() {}
 func (swc SolidWhiteColor) PaintHardwarePixel() {}
@@ -56,7 +53,6 @@ type GridLineColor struct {
 }
 func (glc GridLineColor) IdentifyClass() {}
 func (glc GridLineColor) PaintHardwarePixel() {
-	// Запускаем волновой разворот координат Пеано прямо в нативный буфер Scissor
 	glc.DriverX.ExecuteHardwarePulse()
 }
 
@@ -73,7 +69,10 @@ type TransparentColor struct{}
 func (tc TransparentColor) IdentifyClass() {}
 func (tc TransparentColor) PaintHardwarePixel() {}
 
-type ColorAcceptor interface{ AcceptColor() }
+type ColorAcceptor interface {
+	Action
+	AcceptColor()
+}
 
 type SceneLayer interface {
 	Object
