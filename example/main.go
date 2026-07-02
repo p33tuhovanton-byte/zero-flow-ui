@@ -2,8 +2,7 @@ package main
 
 import "golang.org/x/mobile/gl"
 
-// GameModLauncher — Обобщенный Generic-мод запуска. 
-// Связывает аппаратный контекст OpenGL со сквозным деревом узлов Node Tree.
+// GameModLauncher — Обобщенный Generic-мод запуска
 type GameModLauncher struct {
 	GL         gl.Context
 	Width      Number
@@ -14,7 +13,6 @@ type GameModLauncher struct {
 }
 
 func (gml GameModLauncher) LaunchMod() {
-	// Собираем монолитное дерево комков Node Tree
 	CameraNode{
 		Projection: gml.Projection,
 		ChildNode: CanvasNode{
@@ -43,10 +41,10 @@ type CanvasNode struct {
 }
 func (cn CanvasNode) IdentifyClass() {}
 func (cn CanvasNode) ProcessNode() Action {
-	// Адаптивная настройка вьюпорта на базе объектных чисел Пеано кадра
+	// ИСПРАВЛЕНО: Типизация Viewport приведена к строгому int, съедаемому пакетом gl
 	wVal := peanoToInt(cn.ScanStrategy.(WavefrontOrientedStrategy).MaxX, 0)
 	hVal := peanoToInt(cn.ScanStrategy.(WavefrontOrientedStrategy).MaxY, 0)
-	cn.HardwareGL.Viewport(0, 0, int32(wVal), int32(hVal))
+	cn.HardwareGL.Viewport(0, 0, wVal, hVal)
 
 	CanvasScanner{Step: cn.ScanStrategy, Canvas: OpenGlCanvas{GlContext: cn.HardwareGL}, Storage: EmptySnapshot[GameColor]{}, OutVec: cn.OutVec}.Scan()
 	return EmptyAction{}
@@ -100,6 +98,15 @@ func (psa PixelSaveAcceptor) AcceptColor() {
 	}.Scan()
 }
 
+type GenericColorAcceptor[T GameColor] struct {
+	Target *UniversalContainer[GameColor]
+	Result T
+}
+
+func (gca GenericColorAcceptor[T]) IdentifyClass() {}
+func (gca GenericColorAcceptor[T]) Execute()       { gca.Target.Value = gca.Result }
+func (gca GenericColorAcceptor[T]) AcceptColor()   { gca.Execute() }
+
 type DirectColorAction struct {
 	Target *PixelSaveAcceptor
 	Color  GameColor
@@ -111,18 +118,17 @@ func (cs CanvasScanner) Scan() {
 	saveAcceptor := PixelSaveAcceptor{Scanner: cs, UpdatedCanvas: OpenGlCanvas{GlContext: cs.Canvas.(OpenGlCanvas).GlContext}}
 	glCtx := cs.Canvas.(OpenGlCanvas).GlContext
 
-	uVal := peanoToInt(cs.Step.(WavefrontOrientedStrategy).X, 0)
-	vVal := peanoToInt(cs.Step.(WavefrontOrientedStrategy).Y, 0)
-
+	// ИСПРАВЛЕНО: Ликвидирована ошибка declared and not used для uVal и vVal кадра.
+	// Координаты Пеано напрямую инжектируются в полиморфный поток вывода
 	scene := SceneNode{
 		Background: WhiteBackgroundLayer{Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: SolidWhiteColor{}}},
 		Grid: CoordinateGridLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: GridLineColor{
-			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
-			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
+			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).X, 0), IsYAxis: false},
+			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).Y, 0), IsYAxis: true},
 		}}},
 		Object3D: ThreeDimensionalObjectLayer{CurrentStep: cs.Step, Output: GenericColorAcceptor[GameColor]{Target: &UniversalContainer[GameColor]{}, Result: Object3DColor{
-			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: false},
-			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: 0, IsYAxis: true},
+			DriverX: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).X, 0), IsYAxis: false},
+			DriverY: OpenGlPixelDriver{GL: glCtx, Counter: peanoToInt(cs.Step.(WavefrontOrientedStrategy).Y, 0), IsYAxis: true},
 		}}},
 		FinalOutput: saveAcceptor,
 	}
@@ -211,10 +217,10 @@ func (sa ScanAction) Execute()       { sa.Scanner.Canvas.ReadColor() }
 
 type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
 func (sa StopAction) IdentifyClass() {}
-func (sa ScanAction) Execute()       {}
+func (sa StopAction) Execute()       {}
 
 // ============================================================================
-// ПОЛИМОРФНЫЙ СНИМОК КАДРА
+// ПОЛИМОРФНЫЙ СНИМОК КАДРА (Идеальные пустые сигнатуры методов)
 // ============================================================================
 
 type Snapshot[T Object] interface {
