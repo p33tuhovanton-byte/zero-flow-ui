@@ -282,10 +282,16 @@ isAfterStart := wos.X.Differentiate(cubeStart, Zero{}).CompareWithZero()isBefore
 container.Value = BranchFactory{
   Condition: isAfterStart,
   TrueBranch: DirectAction[Bool]{
-    Target: &UniversalContainer[Bool]{},       Result: isBeforeEnd
+    Target: &UniversalContainer[Bool]{}                            
+
+    Result: isBeforeEnd
   },
   FalseBranch: DirectAction[Bool]{
-    Target: &UniversalContainer[Bool]{},    Result: False{}},}.Create()
+    Target: &UniversalContainer[Bool]{},       
+
+    Result: False{}
+  },
+}.Create()
 
 wos.ProjMethod.InjectContinuation()wos.ProjMethod.Project()return container.Value
 
@@ -329,7 +335,7 @@ type NodeSnapshot[T Object] struct {
   head           Point[T]
   tail           Snapshot[T]
   NewPoint       Point[T]
-  AcceptorTarget *UniversalContainer[Snapshot[T]]
+  AcceptorTarget    *UniversalContainer[Snapshot[T]]
   TargetNewPoint Point[T]
 }
 func (ns NodeSnapshot[T]) IdentifyClass() {}
