@@ -1,9 +1,5 @@
 package main
 
-// ============================================================================
-// ОБОБЩЕННЫЕ КОРНЕВЫЕ КОНТРАКТЫ (Generics без any)
-// ============================================================================
-
 type Object interface {
 	IdentifyClass()
 }
@@ -28,12 +24,10 @@ type EmptyAction struct{}
 func (ea EmptyAction) IdentifyClass() {}
 func (ea EmptyAction) Execute()       {}
 
-// UniversalContainer инкапсулирует результат вычисления любого типа T, расширяющего Object
 type UniversalContainer[T Object] struct {
 	Value T
 }
 
-// DirectAction — обобщенная CPS-команда, избавляющая от десятков мелких структур
 type DirectAction[T Object] struct {
 	Target *UniversalContainer[T]
 	Result T
@@ -41,10 +35,6 @@ type DirectAction[T Object] struct {
 
 func (da DirectAction[T]) IdentifyClass() {}
 func (da DirectAction[T]) Execute()       { da.Target.Value = da.Result }
-
-// ============================================================================
-// АРИФМЕТИКА ПЕАНО НА УНИВЕРСАЛЬНЫХ ШАБЛОНАХ
-// ============================================================================
 
 type Number interface {
 	Object
@@ -56,6 +46,8 @@ type Number interface {
 	EvaluateGridStep(currentStep Number) Bool
 	Differentiate(other Number, accumulator Number) Number
 	EvaluateWaveCenter(maxX Number, threshold Number) Bool
+	// CPS-метод накопления аппаратного индекса без примитивов и return
+	AccumulateHardwareCoordinate(driver HardwareIntegerDriver)
 }
 
 type Zero struct{ CompareTarget Number }
@@ -70,6 +62,10 @@ func (z Zero) IsMultipleOfGrid() Bool { return True{TrueBranch: EmptyAction{}, F
 func (z Zero) EvaluateGridStep(currentStep Number) Bool { return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
 func (z Zero) Differentiate(other Number, accumulator Number) Number { return accumulator }
 func (z Zero) EvaluateWaveCenter(maxX Number, threshold Number) Bool { return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}} }
+func (z Zero) AccumulateHardwareCoordinate(driver HardwareIntegerDriver) {
+	// Ноль завершает накопление импульса, триггеря отправку в GPU
+	driver.ExecuteHardwarePulse()
+}
 
 type Successor struct {
 	pred          Number
@@ -85,11 +81,10 @@ func (s Successor) CompareWithSuccessor() Bool { return Successor{pred: s.pred, 
 func (s Successor) CombinePredecessors() Number { return s.CompareTarget.(Successor).pred }
 
 func (s Successor) IsMultipleOfGrid() Bool {
-	gridInterval := Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
+	return s.EvaluateGridStep(Zero{}.Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
 		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
 		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next().
-		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next()
-	return s.EvaluateGridStep(gridInterval)
+		Next().Next().Next().Next().Next().Next().Next().Next().Next().Next())
 }
 
 func (s Successor) EvaluateGridStep(currentStep Number) Bool {
@@ -120,19 +115,25 @@ type SimpleSuccessorResolver interface{ GetPred() Number }
 func (s Successor) GetPred() Number { return s.pred }
 
 func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
-	distance := maxX.Differentiate(s, Zero{})
 	container := &UniversalContainer[Bool]{}
 	BranchFactory{
-		Condition: distance.Differentiate(threshold, Zero{}).CompareWithZero(),
+		Condition: maxX.Differentiate(s, Zero{}).Differentiate(threshold, Zero{}).CompareWithZero(),
 		TrueBranch: DirectAction[Bool]{Target: container, Result: True{}},
 		FalseBranch: DirectAction[Bool]{Target: container, Result: False{}},
 	}.Create()
 	return container.Value
 }
 
-// ============================================================================
-// ПОЛИМОРФНЫЕ ВЕТВЛЕНИЯ СИСТЕМЫ
-// ============================================================================
+func (s Successor) AccumulateHardwareCoordinate(driver HardwareIntegerDriver) {
+	// Инкрементируем нативный счетчик внутри драйвера и бежим дальше по цепочке Пеано
+	s.pred.AccumulateHardwareCoordinate(driver.IncrementPulse())
+}
+
+type HardwareIntegerDriver interface {
+	Object
+	IncrementPulse() HardwareIntegerDriver
+	ExecuteHardwarePulse()
+}
 
 type True struct{ TrueBranch, FalseBranch Action }
 
@@ -152,9 +153,17 @@ type BranchFactory struct {
 	FalseBranch Action
 }
 
-// ИСПРАВЛЕНО: Полное вырезание TypeResolver и вызова Class().
-// Узел ветвления отправляет импульс напрямую в булев Select() кадра.
 func (bf BranchFactory) Create() Bool {
 	bf.Condition.Select().Execute()
 	return bf.Condition
+}
+
+type TypeResolver struct {
+	ClassName string
+	T, F      Action
+	Target    *UniversalContainer[Bool]
+}
+
+func (tr TypeResolver) Resolve() {
+	tr.Target.Value = True{TrueBranch: tr.T, FalseBranch: tr.F}
 }
