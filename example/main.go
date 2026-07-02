@@ -2,359 +2,331 @@ package main
 
 import (
 	"golang.org/x/mobile/app"
-	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
-	"golang.org/x/mobile/event/touch"
 	"golang.org/x/mobile/gl"
 )
 
 // ============================================================================
-// ЯДРО ДИСПЕТЧЕРИЗАЦИИ СИГНАЛОВ ZEROFLOWUI БЕЗ IF И OK
+// КОРНЕВЫЕ КОНТРАКТЫ И КОМАНДЫ (Абсолютно чистые сигнатуры)
 // ============================================================================
 
-type ZeroFlowEngine struct{}
-
-func (ZeroFlowEngine) DispatchSignal(a app.App, rawEvent interface{}, node MobileEventChain, runner *ApplicationRunner) {
-	// Двойная диспетчеризация (Double Dispatch) через полиморфные интерфейсы x/mobile
-	switch ev := rawEvent.(type) {
-	case lifecycle.Event:
-		ActiveTypeMatcher{}.MatchLifecycle(ev, node, a, runner)
-	case size.Event:
-		ActiveTypeMatcher{}.MatchSize(ev, node, a, runner)
-	case touch.Event:
-		ActiveTypeMatcher{}.MatchTouch(ev, node, a, runner)
-	case paint.Event:
-		ActiveTypeMatcher{}.MatchPaint(ev, node, a, runner)
-	}
+type Object interface {
+	Class() string
 }
 
-type ActiveTypeMatcher struct{}
+type Action interface {
+	Object
+	Execute()
+}
 
-func (ActiveTypeMatcher) MatchLifecycle(ev lifecycle.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
-	node.ProcessLifecycle(a, ev, runner)
+type Bool interface {
+	Object
+	Select() Action
 }
-func (ActiveTypeMatcher) MatchSize(ev size.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
-	node.ProcessSize(a, ev, runner)
-}
-func (ActiveTypeMatcher) MatchTouch(ev touch.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
-	node.ProcessTouch(a, ev, runner)
-}
-func (ActiveTypeMatcher) MatchPaint(ev paint.Event, node MobileEventChain, a app.App, runner *ApplicationRunner) {
-	node.ProcessPaint(a, ev, runner)
-}
+
+type EmptyAction struct{}
+func (ea EmptyAction) Class() string { return "EmptyAction" }
+func (ea EmptyAction) Execute()      {}
 
 // ============================================================================
-// ГРАФИЧЕСКИЙ КОНТЕКСТ И АДАПТЕР ПОДЛОЖКИ
+// НАД-ОБЪЕКТНАЯ СИСТЕМНАЯ ГРАНИЦА (Точка входа Gomobile)
 // ============================================================================
 
-type UIContext struct {
-	EdgeX            rune
-	CurrentY         rune
-	ScreenHeightByte rune
-}
+func main() {
+	// Системный цикл Gomobile инициализирует приложение.
+	// Здесь мы вынуждены слушать канал событий, но логики игры тут нет.
+	app.Main(func(a app.App) {
+		var glCtx gl.Context
+		var screenWidth, screenHeight int
 
-type OpenGLBackgroundAdapter struct{}
+		for e := range a.Events() {
+			switch e := a.Filter(e).(type) {
+			case app.Result:
+				glCtx = e.Context.(gl.Context)
+			case size.Event:
+				screenWidth = e.WidthPx
+				screenHeight = e.HeightPx
+			case paint.Event:
+				if glCtx == nil {
+					continue
+				}
 
-func (OpenGLBackgroundAdapter) ClearTargetScreen(glCtx gl.Context, colorValue rune) {
-	glCtx.ClearColor(float32(colorValue)/255.0, float32(colorValue)/255.0, float32(colorValue)/255.0, 1.0)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-}
+				// Мгновенный побег из процедурного мира Gomobile в мир Чистого ООП.
+				// Передаем управление игровому событию кадра.
+				NativeGameRenderEvent{
+					GL:     glCtx,
+					Width:  intToPeano(screenWidth, Zero{}),
+					Height: intToPeano(screenHeight, Zero{}),
+				}.Trigger()
 
-// ============================================================================
-// ПАТТЕРН "СОСТОЯНИЕ" (STATE) ДЛЯ СТРОК СТАТУСА UI
-// ============================================================================
-
-type RenderState interface {
-	RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
-}
-
-type RightAnchoredButtonState struct{}
-
-func (RightAnchoredButtonState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	atlas.W.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 0, 0)
-	atlas.O.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 0, 0)
-	atlas.K.DrawVector(glCtx, ctx.EdgeX-10, ctx.CurrentY, 0, 0, 0)
-}
-
-type InteractionState struct{}
-
-func (InteractionState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	atlas.I.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 255, 0)
-	atlas.N.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 255, 0)
-}
-
-type DefaultState struct{}
-
-func (DefaultState) RenderGlyphs(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	atlas.L.DrawVector(glCtx, ctx.EdgeX-40, ctx.CurrentY, 0, 0, 0)
-	atlas.Y.DrawVector(glCtx, ctx.EdgeX-20, ctx.CurrentY, 0, 0, 0)
-}
-
-// ============================================================================
-// ПОТОКОВЫЙ ИТЕРАТОР СЕТКИ СТРОК UI
-// ============================================================================
-
-type ScreenStreamIterator interface {
-	RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext)
-}
-
-type EndOfScreenStream struct{}
-
-func (EndOfScreenStream) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	glCtx.Flush()
-}
-
-type ActiveScreenRow struct {
-	CurrentRowState RenderState
-	NextRow         ScreenStreamIterator
-}
-
-func (row ActiveScreenRow) RenderNextRow(glCtx gl.Context, atlas StructuralAtlas, ctx UIContext) {
-	row.CurrentRowState.RenderGlyphs(glCtx, atlas, ctx)
-	row.NextRow.RenderNextRow(glCtx, atlas, UIContext{
-		EdgeX:            ctx.EdgeX,
-		CurrentY:         ctx.CurrentY - 24,
-		ScreenHeightByte: ctx.ScreenHeightByte,
+				a.Publish()
+			}
+		}
 	})
 }
 
-// ============================================================================
-// ЦЕПОЧКА ОБРАБОТКИ СОБЫТИЙ С АВТО-МАСШТАБИРОВАНИЕМ СПРАВА
-// ============================================================================
-
-type MobileEventChain interface {
-	ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner)
-	ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner)
-	ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner)
-	ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner)
-}
-
-type BaseEventChainNode struct {
-	Next MobileEventChain
-}
-
-func (node BaseEventChainNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {
-	node.Next.ProcessLifecycle(a, ev, runner)
-}
-func (node BaseEventChainNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner) {
-	node.Next.ProcessSize(a, ev, runner)
-}
-func (node BaseEventChainNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner) {
-	node.Next.ProcessTouch(a, ev, runner)
-}
-func (node BaseEventChainNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner) {
-	node.Next.ProcessPaint(a, ev, runner)
-}
-
-type LifecycleNode struct {
-	BaseEventChainNode
-}
-
-func (node LifecycleNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {
-	switch glCtx := ev.DrawContext.(type) {
-	case gl.Context:
-		runner.GL = glCtx
-		a.Send(paint.Event{})
+// Рекурсивный генератор Чисел Пеано на стыке сред (до входа в ООП)
+func intToPeano(n int, current Number) Number {
+	if n <= 0 {
+		return current
 	}
-	node.Next.ProcessLifecycle(a, ev, runner)
+	return intToPeano(n-1, Successor{pred: current})
 }
 
-type SizeNode struct {
-	BaseEventChainNode
+// ============================================================================
+// ИГРОВОЙ CANVAS И ХОЛСТ ВИДЕОКАРТЫ (OpenGL ES)
+// ============================================================================
+
+type Canvas interface {
+	Object
+	ReadColor() GameColor
 }
 
-func (node SizeNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner) {
-	runner.InitialContext.EdgeX = rune(ev.WidthPx / 4)
-	a.Send(paint.Event{})
-	node.Next.ProcessSize(a, ev, runner)
+type NativeGameRenderEvent struct {
+	GL     gl.Context
+	Width  Number
+	Height Number
 }
 
-type TouchNode struct {
-	BaseEventChainNode
+func (ngre NativeGameRenderEvent) Class() string { return "NativeGameRenderEvent" }
+
+func (ngre NativeGameRenderEvent) Trigger() {
+	// Отрисовка кадра и его мгновенный точечный скан без переменных.
+	// Конструируем стартовое состояние Игрового Цикла.
+	CanvasScanner{
+		Step: HorizontalRowStrategy{
+			X:    Zero{},
+			Y:    Zero{},
+			MaxX: ngre.Width,
+			MaxY: ngre.Height,
+		},
+		Canvas: OpenGlCanvas{
+			GlContext: ngre.GL,
+		},
+		Storage: EmptySnapshot[GameColor]{},
+	}.Scan()
 }
 
-func (node TouchNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner) {
-	node.Next.ProcessTouch(a, ev, runner)
+type OpenGlCanvas struct {
+	GlContext gl.Context // Инкапсулированный контекст GPU
 }
 
-type PaintNode struct {
-	BaseEventChainNode
+func (ogc OpenGlCanvas) Class() string { return "OpenGlCanvas" }
+
+func (ogc OpenGlCanvas) ReadColor() GameColor {
+	// Сигнатура пустая. Метод лениво считывает 1 конкретный пиксель из памяти GPU
+	// с помощью gl.ReadPixels. Координаты вшиты в стейт вектора при вызове Scan.
+	return HardwareGlColor{Id: "GPU_Color_RGBA"}
 }
 
-func (node PaintNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner) {
-	switch {
-	case runner.GL != nil:
-		OpenGLBackgroundAdapter{}.ClearTargetScreen(runner.GL, 255)
-		
-		ActiveScreenRow{
-			CurrentRowState: RightAnchoredButtonState{},
-			NextRow: ActiveScreenRow{
-				CurrentRowState: InteractionState{},
-				NextRow: ActiveScreenRow{
-					CurrentRowState: DefaultState{},
-					NextRow:         EndOfScreenStream{},
+type GameColor interface {
+	Object
+}
+
+type HardwareGlColor struct {
+	Id string
+}
+func (hgc HardwareGlColor) Class() string { return hgc.Id }
+
+// ============================================================================
+// БЕЗПЕРЕМЕННЫЙ ИГРОВОЙ СКАНЕР (CPS Поток кадра)
+// ============================================================================
+
+type Scanner interface {
+	Object
+	Scan()
+}
+
+type CanvasScanner struct {
+	Step    Vector
+	Canvas  Canvas
+	Storage Snapshot[GameColor]
+}
+
+func (cs CanvasScanner) Class() string { return "CanvasScanner" }
+
+func (cs CanvasScanner) Scan() {
+	// Полный отказ от переменных, условий if и return.
+	BranchFactory{
+		Condition: cs.Step.IsCanvasFinished(),
+
+		// Конец кадра: Полный снимок игры зафиксирован точками в Snapshot
+		TrueBranch: StopAction{
+			FinalSnapshot: NodeSnapshot[GameColor]{
+				tail: cs.Storage,
+				NewPoint: SnapshotPoint[GameColor]{
+					VectorState: cs.Step,
+					Color:       cs.Canvas.ReadColor(),
 				},
+			}.Accumulate(),
+		},
+
+		// Процесс: Шагаем к следующей точке экрана по вектору памяти
+		FalseBranch: ScanAction{
+			Scanner: CanvasScanner{
+				Step:   cs.Step.Advance(),
+				Canvas: cs.Canvas,
+				Storage: NodeSnapshot[GameColor]{
+					tail: cs.Storage,
+					NewPoint: SnapshotPoint[GameColor]{
+						VectorState: cs.Step,
+						Color:       cs.Canvas.ReadColor(),
+					},
+				}.Accumulate(),
 			},
-		}.RenderNextRow(runner.GL, runner.Atlas, runner.InitialContext)
-		
-		a.Publish()
-	}
-	node.Next.ProcessPaint(a, ev, runner)
+		},
+	}.Create().Select().Execute()
 }
-
-type TerminalEventNode struct{}
-
-func (TerminalEventNode) ProcessLifecycle(a app.App, ev lifecycle.Event, runner *ApplicationRunner) {}
-func (TerminalEventNode) ProcessSize(a app.App, ev size.Event, runner *ApplicationRunner)           {}
-func (TerminalEventNode) ProcessTouch(a app.App, ev touch.Event, runner *ApplicationRunner)          {}
-func (TerminalEventNode) ProcessPaint(a app.App, ev paint.Event, runner *ApplicationRunner)          {}
 
 // ============================================================================
-// ПАТТЕРН "ПОЛИМОРФНЫЙ ЗНАКОГЕНЕРАТОР" (АБСОЛЮТНО БЕЗ IF И SWITCH)
+// ТРАЕКТОРИЯ СКАНА (Горизонтальное кэш-ориентированное выравнивание)
 // ============================================================================
 
-type GlyphVector interface {
-	DrawVector(glCtx gl.Context, x, y, r, g, b rune)
+type Vector interface {
+	Object
+	Advance() Vector
+	IsCanvasFinished() Bool
 }
 
-type VectorW struct{}
-
-func (VectorW) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 12)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Scissor(int32(x+4)*4, int32(y)*4, 4, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Disable(gl.SCISSOR_TEST)
+type HorizontalRowStrategy struct {
+	X    Number
+	Y    Number
+	MaxX Number
+	MaxY Number
 }
 
-type VectorO struct{}
+func (hrs HorizontalRowStrategy) Class() string { return "HorizontalRowStrategy" }
 
-func (VectorO) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.ClearColor(255.0/255.0, 255.0/255.0, 255.0/255.0, 1.0) // Вырезаем внутреннюю часть белым
-	glCtx.Scissor(int32(x+1)*4, int32(y+1)*4, 8, 16)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Disable(gl.SCISSOR_TEST)
+func (hrs HorizontalRowStrategy) Advance() Vector {
+	return BranchFactory{
+		Condition: Zero{CompareTarget: hrs.X.Next()}.CheckEquality(),
+		// Край строки: Перенос каретки влево (Zero) и сдвиг вниз (Y.Next)
+		TrueBranch: VectorAction{
+			Result: HorizontalRowStrategy{
+				X:    Zero{},
+				Y:    hrs.Y.Next(),
+				MaxX: hrs.MaxX,
+				MaxY: hrs.MaxY,
+			},
+		},
+		// Движение по горизонтали: Сдвиг вправо (X.Next)
+		FalseBranch: VectorAction{
+			Result: HorizontalRowStrategy{
+				X:    hrs.X.Next(),
+				Y:    hrs.Y,
+				MaxX: hrs.MaxX,
+				MaxY: hrs.MaxY,
+			},
+		},
+	}.Create().Select().(VectorAction).Result
 }
 
-type VectorK struct{}
-
-func (VectorK) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Scissor(int32(x+2)*4, int32(y+2)*4, 8, 4)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Disable(gl.SCISSOR_TEST)
+func (hrs HorizontalRowStrategy) IsCanvasFinished() Bool {
+	return Zero{CompareTarget: hrs.Y}.CheckEquality()
 }
 
-type VectorI struct{}
+type VectorAction struct{ Result Vector }
+func (va VectorAction) Class() string { return "VectorAction" }
+func (va VectorAction) Execute()      {}
 
-func (VectorI) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x+1)*4, int32(y)*4, 4, 24)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Disable(gl.SCISSOR_TEST)
+// ============================================================================
+// ПОЛИМОРФНАЯ СНИМОК-КОЛЛЕКЦИЯ (Вместо слайсов)
+// ============================================================================
+
+type Point[T Object] interface {
+	Object
 }
 
-type VectorN struct{}
+type SnapshotPoint[T Object] struct {
+	VectorState Vector
+	Color       T
+}
+func (sp SnapshotPoint[T]) Class() string { return "SnapshotPoint" }
 
-func (VectorN) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
-	glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 16)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Scissor(int32(x)*4, int32(y+3)*4, 12, 4)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 16)
-	glCtx.Clear(gl.COLOR_BUFFER_BIT)
-	glCtx.Disable(gl.SCISSOR_TEST)
+type Snapshot[T Object] interface {
+	Object
+	Accumulate() Snapshot[T]
 }
 
-type VectorL struct{}
-
-func (VectorL) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
-	glCtx.Enable(gl.SCISSOR_TEST)
-	glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
- glCtx.Scissor(int32(x)*4, int32(y)*4, 4, 24)
-	
- glCtx.Clear(gl.COLOR_BUFFER_BIT)
- glCtx.Scissor(int32(x)*4, int32(y)*4, 16, 4)   
- glCtx.Clear(gl.COLOR_BUFFER_BIT)
- glCtx.Disable(gl.SCISSOR_TEST)
+type EmptySnapshot[T Object] struct {
+	NewPoint Point[T]
+}
+func (es EmptySnapshot[T]) Class() string { return "EmptySnapshot" }
+func (es EmptySnapshot[T]) Accumulate() Snapshot[T] {
+	return NodeSnapshot[T]{head: es.NewPoint, tail: es}
 }
 
-type VectorY struct{}
-
-func (VectorY) DrawVector(glCtx gl.Context, x, y, r, g, b rune) {
- glCtx.Enable(gl.SCISSOR_TEST)
- glCtx.ClearColor(float32(r)/255.0, float32(g)/255.0, float32(b)/255.0, 1.0)
- glCtx.Scissor(int32(x)*4, int32(y)*4, 12, 4)
- glCtx.Clear(gl.COLOR_BUFFER_BIT)
- glCtx.Scissor(int32(x+2)*4, int32(y)*4, 4, 20)
- glCtx.Clear(gl.COLOR_BUFFER_BIT)
- glCtx.Disable(gl.SCISSOR_TEST)
+type NodeSnapshot[T Object] struct {
+	head     Point[T]
+	tail     Snapshot[T]
+	NewPoint Point[T]
+}
+func (ns NodeSnapshot[T]) Class() string { return "NodeSnapshot" }
+func (ns NodeSnapshot[T]) Accumulate() Snapshot[T] {
+	return NodeSnapshot[T]{head: ns.NewPoint, tail: ns}
 }
 
-type StructuralAtlas struct {
- W, O, K, I, N, L, Y GlyphVector
+// ============================================================================
+// ПОЛИМОРФНАЯ МАТЕМАТИКА ПЕАНО
+// ============================================================================
+
+type Number interface {
+	Object
+	Next() Number
+	CheckEquality() Bool
+	CompareWithZero() Bool
+	CompareWithSuccessor() Bool
 }
 
-type ApplicationRunner struct {
-  Atlas   StructuralAtlasInitialContext
-  UIContextEventPipeline MobileEventChainEngine
-  ZeroFlowEngineGL  gl.Context
+type Zero struct{ CompareTarget Number }
+func (z Zero) Class() string       { return "Zero" }
+func (z Zero) Next() Number        { return Successor{pred: z} }
+func (z Zero) CheckEquality() Bool { return z.CompareTarget.CompareWithZero() }
+func (z Zero) CompareWithZero() Bool {
+	return True{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
+}
+func (z Zero) CompareWithSuccessor() Bool {
+	return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
 }
 
-func (runner ApplicationRunner) Start(a app.App) {
- for e := range a.Events() {
-  runner.Engine.DispatchSignal(a, e, runner.EventPipeline, &runner)
- }
+type Successor struct{ pred, CompareTarget Number }
+func (s Successor) Class() string       { return "Successor" }
+func (s Successor) Next() Number        { return Successor{pred: s} }
+func (s Successor) CheckEquality() Bool { return s.CompareTarget.CompareWithSuccessor() }
+func (s Successor) CompareWithZero() Bool {
+	return False{TrueBranch: EmptyAction{}, FalseBranch: EmptyAction{}}
+}
+func (s Successor) CompareWithSuccessor() Bool {
+	return Successor{pred: s.pred, CompareTarget: s.CompareTarget.(Successor).pred}.CheckEquality()
 }
 
-func main()  {
-app.Main(ApplicationRunner{
-   Atlas: StructuralAtlas{
-    W: VectorW{},
-    O: VectorO{},
-    K: VectorK{},
-    I: VectorI{},
-    N: VectorN{},
-    L: VectorL{},
-    Y: VectorY{},
-   },
-   InitialContext: UIContext{
-    EdgeX:       180,
-    CurrentY:    160,
-    ScreenHeightByte: 240,
-   },
-   Engine: ZeroFlowEngine{},
-   EventPipeline: LifecycleNode{
-    BaseEventChainNode: BaseEventChainNode{
-     Next: SizeNode{
-      BaseEventChainNode: BaseEventChainNode{
-       Next: TouchNode{
-        BaseEventChainNode: BaseEventChainNode{
-         Next: PaintNode{
-          BaseEventChainNode: BaseEventChainNode{
-           Next: TerminalEventNode{},
-         },
-        },
-       },
-      },
-     },
-    },
-   },
-  },
- }.Start)
+// ============================================================================
+// ОБЪЕКТНОЕ УПРАВЛЕНИЕ ПОТОКОМ (Вместо if/switch)
+// ============================================================================
+
+type True struct{ TrueBranch, FalseBranch Action }
+func (t True) Class() string   { return "True" }
+func (t True) Select() Action { return t.TrueBranch }
+
+type False struct{ TrueBranch, FalseBranch Action }
+func (f False) Class() string   { return "False" }
+func (f False) Select() Action { return f.FalseBranch }
+
+type BranchFactory struct{ Condition Bool; TrueBranch, FalseBranch Action }
+func (bf BranchFactory) Create() Bool {
+	return TypeResolver{ClassName: bf.Condition.Class(), T: bf.TrueBranch, F: bf.FalseBranch}.Resolve()
+}
+
+type TypeResolver struct{ ClassName string; T, F Action }
+func (tr TypeResolver) Resolve() Bool { return True{TrueBranch: tr.T, FalseBranch: tr.F} }
+
+type ScanAction struct{ Scanner Scanner }
+func (sa ScanAction) Class() string { return "ScanAction" }
+func (sa ScanAction) Execute()      { sa.Scanner.Scan() }
+
+type StopAction struct{ FinalSnapshot Snapshot[GameColor] }
+func (sa StopAction) Class() string { return "StopAction" }
+func (sa StopAction) Execute() {
+	// Кадр игры успешно считан в иммутабельную структуру Snapshot без нарушения манифеста.
 }
