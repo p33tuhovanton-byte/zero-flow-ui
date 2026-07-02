@@ -1,12 +1,17 @@
 package main
 
+// Node — корневой интерфейс для абсолютно всех системных комков движка
+type Node interface {
+	Object
+	ProcessNode() Action
+}
+
 type Object interface {
 	IdentifyClass()
 }
 
-type Node interface {
-	Object
-	ProcessNode() Action
+type ClassConsumer interface {
+	AcceptClassName()
 }
 
 type Action interface {
@@ -24,17 +29,19 @@ type EmptyAction struct{}
 func (ea EmptyAction) IdentifyClass() {}
 func (ea EmptyAction) Execute()       {}
 
+// UniversalContainer передается строго по значению (Immutable state)
 type UniversalContainer[T Object] struct {
 	Value T
 }
 
+// DirectAction — обобщенная CPS-команда, работающая со значениями без гонок памяти
 type DirectAction[T Object] struct {
-	Target *UniversalContainer[T]
+	Target UniversalContainer[T]
 	Result T
 }
 
 func (da DirectAction[T]) IdentifyClass() {}
-func (da DirectAction[T]) Execute()       { da.Target.Value = da.Result }
+func (da DirectAction[T]) Execute()       {}
 
 type Number interface {
 	Object
@@ -46,13 +53,12 @@ type Number interface {
 	EvaluateGridStep(currentStep Number) Bool
 	Differentiate(other Number, accumulator Number) Number
 	EvaluateWaveCenter(maxX Number, threshold Number) Bool
-	// ИСПРАВЛЕНО: Сигнатура идеально пустая (). Драйвер вшит внутрь числа при вызове.
 	AccumulateHardwareCoordinate()
 }
 
 type Zero struct {
 	CompareTarget Number
-	ActiveDriver  HardwareIntegerDriver // Инкапсулированный драйвер GPU
+	ActiveDriver  HardwareIntegerDriver 
 }
 
 func (z Zero) IdentifyClass()       {}
@@ -91,21 +97,21 @@ func (s Successor) IsMultipleOfGrid() Bool {
 }
 
 func (s Successor) EvaluateGridStep(currentStep Number) Bool {
-	container := &UniversalContainer[Bool]{}
+	container := UniversalContainer[Bool]{}
 	BranchFactory{
 		Condition: currentStep.CompareWithZero(),
 		TrueBranch: DirectAction[Bool]{Target: container, Result: s.IsMultipleOfGrid()},
 		FalseBranch: DirectAction[Bool]{Target: container, Result: BranchFactory{
 			Condition: s.pred.CompareWithZero(),
-			TrueBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: False{}},
-			FalseBranch: DirectAction[Bool]{Target: &UniversalContainer[Bool]{}, Result: s.pred.EvaluateGridStep(currentStep.(Successor).pred)},
+			TrueBranch: DirectAction[Bool]{Target: UniversalContainer[Bool]{}, Result: False{}},
+			FalseBranch: DirectAction[Bool]{Target: UniversalContainer[Bool]{}, Result: s.pred.EvaluateGridStep(currentStep.(Successor).pred)},
 		}.Create()},
 	}.Create()
 	return container.Value
 }
 
 func (s Successor) Differentiate(other Number, accumulator Number) Number {
-	container := &UniversalContainer[Number]{}
+	container := UniversalContainer[Number]{}
 	BranchFactory{
 		Condition: other.CompareWithZero(),
 		TrueBranch: DirectAction[Number]{Target: container, Result: s},
@@ -118,7 +124,7 @@ type SimpleSuccessorResolver interface{ GetPred() Number }
 func (s Successor) GetPred() Number { return s.pred }
 
 func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
-	container := &UniversalContainer[Bool]{}
+	container := UniversalContainer[Bool]{}
 	BranchFactory{
 		Condition: maxX.Differentiate(s, Zero{}).Differentiate(threshold, Zero{}).CompareWithZero(),
 		TrueBranch: DirectAction[Bool]{Target: container, Result: True{}},
@@ -128,10 +134,7 @@ func (s Successor) EvaluateWaveCenter(maxX Number, threshold Number) Bool {
 }
 
 func (s Successor) AccumulateHardwareCoordinate() {
-	// Подмешиваем импульс в драйвер и каскадно проталкиваем рекурсию вперед
 	nextDriver := s.ActiveDriver.IncrementPulse()
-	
-	// Конструируем следующий шаг Пеано с инкапсулированным обновленным драйвером
 	nextState := s.pred
 	if node, ok := nextState.(Successor); ok {
 		node.ActiveDriver = nextDriver
@@ -140,7 +143,6 @@ func (s Successor) AccumulateHardwareCoordinate() {
 		empty.ActiveDriver = nextDriver
 		nextState = empty
 	}
-	
 	nextState.AccumulateHardwareCoordinate()
 }
 
