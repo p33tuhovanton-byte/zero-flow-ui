@@ -106,10 +106,6 @@ func (tdol ThreeDimensionalObjectLayer) RenderPixel() Action {
 	return EmptyAction{}
 }
 
-// ============================================================================
-// ИЕРАРХИЯ КОМКОВ ДВИЖКА (Node Tree)
-// ============================================================================
-
 type CameraNode struct {
 	Projection ProjectionStrategy
 	ChildNode  Node
