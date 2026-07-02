@@ -93,6 +93,10 @@ type NativeGameRenderEvent struct {
 
 func (ngre NativeGameRenderEvent) IdentifyClass() {}
 func (ngre NativeGameRenderEvent) Trigger() {
+	// Перед запуском сканера очищаем нативный буфер экрана базовым цветом
+	ngre.GL.ClearColor(1.0, 1.0, 1.0, 1.0)
+	ngre.GL.Clear(gl.COLOR_BUFFER_BIT)
+
 	CanvasScanner{
 		Step:    HorizontalRowStrategy{X: Zero{}, Y: Zero{}, MaxX: ngre.Width, MaxY: ngre.Height, ProjMethod: ngre.Projection},
 		Canvas:  OpenGlCanvas{GlContext: ngre.GL},
@@ -127,10 +131,13 @@ func (cs CanvasScanner) IdentifyClass() {}
 type PixelSaveAcceptor struct {
 	Scanner       CanvasScanner
 	UpdatedCanvas OpenGlCanvas
-	InjectedColor GameColor // ИСПРАВЛЕНО: Ячейка памяти цвета успешно добавлена в структуру
+	InjectedColor GameColor 
 }
 
 func (psa PixelSaveAcceptor) AcceptColor() {
+	// Как только цвет вычислен — объект цвета сам дает команду видеокарте на покраску пикселя
+	psa.InjectedColor.PaintHardwarePixel()
+
 	CanvasScanner{
 		Step:   psa.Scanner.Step.AdvanceVector(),
 		Canvas: psa.UpdatedCanvas,
